@@ -4,12 +4,17 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use mdcat::push_tty;
+use mdcat::terminal::TerminalProgram;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
 use slugify::slugify;
-use stories::print_markdown;
+
+use mdcat::Settings;
+use pulldown_cmark::Options;
+use syntect::parsing::SyntaxSet;
 use tabled::merge::Merge;
 use tabled::object::Columns;
 use tabled::style::{Style, VerticalLine};
@@ -637,4 +642,30 @@ mod tests {
         assert_eq!(extract_id("123-456-yep"), Some("123".to_string()));
         assert_eq!(extract_id("foobar"), None);
     }
+}
+
+fn print_markdown(text: &str) -> anyhow::Result<()> {
+    let parser = pulldown_cmark::Parser::new_ext(
+        text,
+        Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH,
+    );
+
+    let settings: Settings = mdcat::Settings {
+        terminal_capabilities: TerminalProgram::Ansi.capabilities(),
+        terminal_size: mdcat::terminal::TerminalSize::default(),
+        resource_access: mdcat::ResourceAccess::LocalOnly,
+        syntax_set: SyntaxSet::load_defaults_newlines(),
+    };
+    let env = mdcat::Environment::for_local_directory(&std::env::current_dir().unwrap()).unwrap();
+
+    let stdout = std::io::stdout();
+    let mut output = stdout.lock();
+
+    push_tty(&settings, &env, &mut output, parser).or_else(|error| {
+        if error.kind() == std::io::ErrorKind::BrokenPipe {
+            Ok(())
+        } else {
+            Err(anyhow!("Cannot render markdown to stdout: {:?}", error))
+        }
+    })
 }
