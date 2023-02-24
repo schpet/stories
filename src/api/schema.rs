@@ -1,17 +1,71 @@
-// Example code that deserializes and serializes the model.
-// extern crate serde;
-// #[macro_use]
-// extern crate serde_derive;
-// extern crate serde_json;
-//
-// use generated_module::Activity;
-//
-// fn main() {
-//     let json = r#"{"answer": 42}"#;
-//     let model: Activity = serde_json::from_str(&json).unwrap();
-// }
+use serde::{Deserialize, Serialize};
 
-use serde::Deserialize;
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Story {
+    pub name: String,
+    pub id: u32,
+    pub current_state: StoryState,
+    pub story_type: StoryType,
+    pub url: String,
+    #[serde(default)]
+    pub estimate: Option<u32>,
+    pub labels: Vec<Label>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum StoryType {
+    #[serde(rename = "bug")]
+    Bug,
+    #[serde(rename = "feature")]
+    Feature,
+    #[serde(rename = "chore")]
+    Chore,
+    #[serde(rename = "release")]
+    Release,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum StoryState {
+    #[serde(rename = "accepted")]
+    Accepted,
+    #[serde(rename = "delivered")]
+    Delivered,
+    #[serde(rename = "finished")]
+    Finished,
+    #[serde(rename = "started")]
+    Started,
+    #[serde(rename = "rejected")]
+    Rejected,
+    #[serde(rename = "planned")]
+    Planned,
+    #[serde(rename = "unstarted")]
+    Unstarted,
+    #[serde(rename = "unscheduled")]
+    Unscheduled,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct StoryDetail {
+    pub name: String,
+    pub id: u32,
+    pub current_state: StoryState,
+    pub story_type: StoryType,
+    pub url: String,
+    #[serde(default)]
+    pub estimate: Option<u32>,
+    pub labels: Vec<Label>,
+    pub description: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Label {
+    pub id: u64,
+    pub project_id: u64,
+    pub kind: String,
+    pub name: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
 
 // https://www.pivotaltracker.com/help/api/rest/v5#activity_resource
 

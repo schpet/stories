@@ -1,3 +1,4 @@
+use api::schema::{StoryState, StoryType};
 use chrono::{DateTime, Local};
 use clap::{Parser, Subcommand};
 use colored::*;
@@ -28,73 +29,6 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-
-#[derive(Deserialize, Serialize, Debug)]
-struct Story {
-    name: String,
-    id: u32,
-    current_state: StoryState,
-    story_type: StoryType,
-    url: String,
-    #[serde(default)]
-    estimate: Option<u32>,
-    labels: Vec<Label>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-enum StoryType {
-    #[serde(rename = "bug")]
-    Bug,
-    #[serde(rename = "feature")]
-    Feature,
-    #[serde(rename = "chore")]
-    Chore,
-    #[serde(rename = "release")]
-    Release,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-enum StoryState {
-    #[serde(rename = "accepted")]
-    Accepted,
-    #[serde(rename = "delivered")]
-    Delivered,
-    #[serde(rename = "finished")]
-    Finished,
-    #[serde(rename = "started")]
-    Started,
-    #[serde(rename = "rejected")]
-    Rejected,
-    #[serde(rename = "planned")]
-    Planned,
-    #[serde(rename = "unstarted")]
-    Unstarted,
-    #[serde(rename = "unscheduled")]
-    Unscheduled,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-struct StoryDetail {
-    name: String,
-    id: u32,
-    current_state: StoryState,
-    story_type: StoryType,
-    url: String,
-    #[serde(default)]
-    estimate: Option<u32>,
-    labels: Vec<Label>,
-    description: String,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-struct Label {
-    id: u64,
-    project_id: u64,
-    kind: String,
-    name: String,
-    created_at: String,
-    updated_at: String,
-}
 
 #[derive(Tabled, Debug)]
 struct StoryRow {
@@ -287,7 +221,7 @@ pub async fn branch(
         project_id, story_id
     );
 
-    let data: StoryDetail = client.get(&story_url).send().await?.json().await?;
+    let data: api::schema::StoryDetail = client.get(&story_url).send().await?.json().await?;
     // let me = tracker_me().await?;
 
     // let story_type = match &data.story_type {
@@ -339,7 +273,7 @@ pub async fn branch(
     };
 
     // let data: &StoryDetail = &response.json().await?;
-    let data = serde_json::from_str::<StoryDetail>(&response_text)?;
+    let data = serde_json::from_str::<api::schema::StoryDetail>(&response_text)?;
 
     // TODO: if a feature is not pointed, there will be a serialization error here
 
@@ -483,7 +417,7 @@ pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
         project_id, branch_id
     );
 
-    let data: StoryDetail = client.get(url).send().await?.json().await?;
+    let data: api::schema::StoryDetail = client.get(url).send().await?.json().await?;
 
     let doc = format!("# {}\n\n{}", data.name, data.description);
 
@@ -522,7 +456,7 @@ pub async fn mine(json: bool) -> anyhow::Result<String> {
         return Ok(response.text().await?);
     }
 
-    let data: Vec<Story> = response.json().await?;
+    let data: Vec<api::schema::Story> = response.json().await?;
 
     let rows: Vec<StoryRow> = data
         .into_iter()
