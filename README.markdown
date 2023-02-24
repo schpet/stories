@@ -22,6 +22,9 @@ stories view --web
 # you can pass an id instead of git branch
 stories view 12345
 
+# show a report of recent changes you've made to stories
+stories activity 
+
 # show all of the commands
 stories --help
 ```
@@ -42,4 +45,4 @@ cd stories
 cargo build release
 ```
 
-throw an `alias s=stories` in your ~/.zshrc ~/.bashrc for good measure.
+throw `alias s=stories` in your ~/.zshrc ~/.bashrc for good measure.
