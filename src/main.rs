@@ -1,5 +1,7 @@
+use chrono::{DateTime, Local};
 use clap::{Parser, Subcommand};
 use colored::*;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
@@ -7,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
 use slugify::slugify;
 use stories::print_markdown;
+use tabled::merge::Merge;
+use tabled::object::Columns;
 use tabled::style::{Style, VerticalLine};
 use tabled::{object::Rows, Modify, Table, Tabled, Width};
 
@@ -14,6 +18,8 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::header;
 use sha256::digest;
 use terminal_link::Link;
+
+pub mod api;
 
 use indoc::indoc;
 use std::{
@@ -169,6 +175,8 @@ enum Commands {
     /// Currently authenticated user
     Whoami {},
 
+    /// Recent things you have done on tracker
+    Activity {},
     // ideas:
     // standup
     // - lists stories recently completed
@@ -223,13 +231,17 @@ async fn main() -> Result<()> {
             todo!()
         }
 
+        Some(Commands::Activity {}) => {
+            print_result(activity().await);
+        }
+
         None => {}
     }
 
     Ok(())
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Me {
     id: u64,
     name: String,
@@ -363,6 +375,91 @@ async fn tracker_me() -> anyhow::Result<Me> {
             Ok(data)
         }
     }
+}
+
+#[derive(Tabled, Debug)]
+struct ActivityRow {
+    #[tabled(rename = "Date")]
+    date: String,
+    #[tabled(rename = "Story")]
+    name: String,
+    #[tabled(rename = "Changes")]
+    highlights: String,
+}
+
+async fn activity() -> anyhow::Result<String> {
+    let client = tracker_api_client().await?;
+    let project_id = read_project_id()?;
+
+    let activities: Vec<api::schema::Activity> = client
+        .get("https://www.pivotaltracker.com/services/v5/my/activity")
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let mut rows: Vec<ActivityRow> = Vec::new();
+
+    activities
+        .into_iter()
+        .filter(|a| a.project.id == project_id)
+        .filter(|a| a.kind == "story_update_activity")
+        .group_by(|a| {
+            let datetime_utc = DateTime::parse_from_rfc3339(&a.occurred_at).unwrap();
+            datetime_utc.with_timezone(&Local).date_naive()
+        })
+        .into_iter()
+        .for_each(|(date, activities_by_date)| {
+            activities_by_date
+                .sorted_by(|a, b| {
+                    a.primary_resources[0]
+                        .id
+                        .partial_cmp(&b.primary_resources[0].id)
+                        .unwrap()
+                })
+                .group_by(|a| {
+                    format!(
+                        "{} {}",
+                        a.primary_resources[0].id, a.primary_resources[0].name
+                    )
+                })
+                .into_iter()
+                .for_each(|(story_label, activities_for_story)| {
+                    let highlights = activities_for_story
+                        .sorted_by(|a, b| a.occurred_at.partial_cmp(&b.occurred_at).unwrap())
+                        .map(|a| match a.highlight.as_str() {
+                            "delivered" => "delivered".green().to_string(),
+                            "finished" => "finished".cyan().to_string(),
+                            "started" => "started".blue().to_string(),
+                            other => other.to_string(),
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ");
+
+                    rows.push(ActivityRow {
+                        date: date.format("%a %b %d").to_string(),
+                        name: story_label,
+                        highlights,
+                    });
+                });
+        });
+
+    let mut table = Table::new(&rows);
+
+    let (terminal_size::Width(width), terminal_size::Height(_height)) =
+        terminal_size::terminal_size().unwrap();
+
+    // table.with(Modify::new(Columns::first()).with(Width::increase(15)).with(Width::wrap(15)));
+    table.with(Modify::new(Columns::last()).with(Width::wrap(30).keep_words()));
+
+    table
+        .with(Merge::horizontal())
+        .with(Merge::vertical())
+        .with(Style::modern())
+        .with(Width::wrap(width as usize).keep_words())
+        .with(Width::increase(width as usize));
+
+    Ok(table.to_string())
 }
 
 pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
