@@ -11,7 +11,7 @@ some commands it offers:
 stories mine
 
 # checks out a branch for a story, and marks it as started
-stories start 12345
+stories branch 12345
 
 # print a story to stdout, based on the git branch
 stories view
