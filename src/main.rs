@@ -49,6 +49,7 @@ struct StoryRow {
     actions: String,
 }
 
+/// Pivotal Tracker CLI client
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -593,11 +594,11 @@ pub fn read_branch_id() -> anyhow::Result<String> {
                         {}
 
                     what we're looking for:
-                        12345-some-feature
+                        some-feature-12345
 
                 run the following to checkout a relevant branch for a story
 
-                    $ stories start 12345
+                    $ stories branch 12345
             "#},
             branch
         ))
