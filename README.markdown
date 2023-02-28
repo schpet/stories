@@ -53,6 +53,7 @@ throw `alias s=stories` in your ~/.zshrc ~/.bashrc for good measure.
 1. get your api token at https://www.pivotaltracker.com/profile#api
 2. write this token into a file at ~/.config/stories/tracker_api_token.txt, e.g.
    ```bash
+   mkdir -p ~/.config/stories
    echo $YOUR_TRACKER_API_TOKEN > ~/.config/stories/tracker_api_token.txt
    ```
 3. drop a `stories.json` file in your project directory with a tracker project id, e.g. 
