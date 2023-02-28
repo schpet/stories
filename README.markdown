@@ -23,7 +23,7 @@ stories view --web
 stories view 12345
 
 # show a report of recent changes you've made to stories
-stories activity 
+stories activity
 
 # show all of the commands
 stories --help
@@ -31,18 +31,31 @@ stories --help
 
 ## Installation
 
-Homebrew:
+Homebrew (mac):
 
 ```sh
-brew install --cask ...todo...
+brew install schpet/tap/stories
 ```
 
-From source:
+Linux and mac binaries also available on [releases](https://github.com/schpet/stories/releases)
+
+Cargo (from source):
 
 ```
-git clone <this repo>
-cd stories
-cargo build release
+# in this project's dir
+cargo install --path .
 ```
 
 throw `alias s=stories` in your ~/.zshrc ~/.bashrc for good measure.
+
+## Setup
+
+1. get your api token at https://www.pivotaltracker.com/profile#api
+2. write this token into a file at ~/.config/stories/tracker_api_token.txt, e.g.
+   ```bash
+   echo $YOUR_TRACKER_API_TOKEN > ~/.config/stories/tracker_api_token.txt
+   ```
+3. drop a `stories.json` file in your project directory with a tracker project id, e.g. 
+   ```json
+   {"project_id":1234}
+   ```
