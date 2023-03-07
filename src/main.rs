@@ -1,6 +1,6 @@
 use api::schema::{StoryState, StoryType};
 use chrono::{DateTime, Local};
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use colored::*;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -96,13 +96,7 @@ enum Commands {
     },
 
     /// Print out suggested pull request title or body
-    Pr {
-        #[arg(value_enum)]
-        field: PrField,
-
-        /// Optionally provide a story id, otherwise find it in the current git branch
-        story_id: Option<u64>,
-    },
+    Pr(PrArgs),
 
     /// Stories assigned to you
     Mine {
@@ -122,6 +116,15 @@ enum Commands {
     // - recent commits to main branch
 
     // cache clear
+}
+
+#[derive(Args)]
+pub struct PrArgs {
+    #[arg(value_enum)]
+    field: PrField,
+
+    /// Optionally provide a story id, otherwise find it in the current git branch
+    story_id: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -163,11 +166,8 @@ async fn main() -> Result<()> {
         }) => {
             print_result(branch(*story_id, name, *estimate).await);
         }
-        Some(Commands::Pr {
-            field: _,
-            story_id: _,
-        }) => {
-            todo!()
+        Some(Commands::Pr(pr_args)) => {
+            print_result(pull_request(pr_args).await);
         }
 
         Some(Commands::Activity {}) => {
@@ -178,6 +178,36 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<String> {
+    let story_id = match pr_args.story_id {
+        Some(id) => id.to_string(),
+        None => read_branch_id()?,
+    };
+
+    let project_id = read_project_id()?;
+    let story_url = format!(
+        "https://www.pivotaltracker.com/services/v5/projects/{}/stories/{}",
+        project_id, story_id
+    );
+    let client = tracker_api_client().await?;
+    let story: api::schema::StoryDetail = client.get(&story_url).send().await?.json().await?;
+
+    match pr_args.field {
+        PrField::Body => {
+            let message = format!(
+                indoc! {r#"
+                    {}
+
+                    {}
+                    [delivers #{}]"#},
+                story.name, story.url, story.id,
+            );
+            Ok(message)
+        }
+        PrField::Title => Ok(story.name),
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
