@@ -277,13 +277,24 @@ pub async fn branch(
         .arg("switch")
         .arg("-c")
         .arg(&branch_name)
-        .spawn()?
-        .wait();
+        .output();
 
-    // nicer way of doing this?
-    if git_result.is_err() {
-        return Err(git_result.unwrap_err().into());
-    }
+    let git_message = match git_result {
+        Ok(result) => {
+            if result.status.success() {
+                format!("checked out branch successfully: {}", branch_name)
+            } else {
+                format!(
+                    "🔥 git operation failed, you will need to check out the branch manually: \n{}",
+                    branch_name
+                )
+            }
+        }
+        Err(err) => {
+            // this right?
+            return Err(err.into());
+        }
+    };
 
     let mut map = Map::new();
     map.insert(
@@ -312,10 +323,7 @@ pub async fn branch(
 
     // TODO: if a feature is not pointed, there will be a serialization error here
 
-    Ok(format!(
-        "updated story {} and checked out branch '{}'",
-        data.id, branch_name
-    ))
+    Ok(format!("{}\nupdated story {}", git_message, data.id))
 }
 
 async fn tracker_me() -> anyhow::Result<Me> {
