@@ -58,14 +58,6 @@ struct StoryRow {
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    // /// Sets a custom config file
-    // #[arg(short, long, value_name = "FILE")]
-
-    // config: Option<PathBuf>,
-    /// Turn debugging information on
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    debug: u8,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -637,11 +629,13 @@ pub fn read_branch_id() -> anyhow::Result<String> {
                         {}
 
                     what we're looking for:
-                        12345-some-feature
+                        some-feature-12345
 
-                run the following to checkout a relevant branch for a story
+                run the following to create a relevant branch for a story, and set the story's
+                status to "started"
 
-                    $ stories start 12345
+                    $ stories branch 12345
+
             "#},
             branch
         ))
