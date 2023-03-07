@@ -1,3 +1,9 @@
+// dear reader:
+//
+// the following is my 2nd rust program, and it panics less than my first one,
+// but is still very amateur level stuff and thrown together without much
+// consideration for aesthetics.
+
 use api::schema::{StoryState, StoryType};
 use chrono::{DateTime, Local};
 use clap::{Args, Parser, Subcommand};
