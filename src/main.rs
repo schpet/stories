@@ -82,6 +82,7 @@ enum Commands {
     },
 
     /// Checks out a git branch and changes the story's state to started
+    #[clap(alias = "br")]
     Branch {
         story_id: u64,
 
