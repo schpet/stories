@@ -14,7 +14,7 @@ use mdcat::push_tty;
 use mdcat::terminal::TerminalProgram;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use serde_json::{Map, Number, Value};
 use slugify::slugify;
 
@@ -208,15 +208,6 @@ pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<String> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Me {
-    id: u64,
-    name: String,
-    initials: String,
-    username: String,
-    email: String,
-}
-
 pub async fn whoami() -> anyhow::Result<String> {
     let data = tracker_me().await?;
     Ok(format!("you: {}", data.email))
@@ -324,7 +315,7 @@ pub async fn branch(
     Ok(format!("{}\nupdated story {}", git_message, data.id))
 }
 
-async fn tracker_me() -> anyhow::Result<Me> {
+async fn tracker_me() -> anyhow::Result<api::schema::Me> {
     let token = read_api_token()?;
     let client = tracker_api_client().await?;
 
@@ -336,7 +327,7 @@ async fn tracker_me() -> anyhow::Result<Me> {
     match &cached {
         Ok(cached) => Ok(serde_json::from_slice(cached)?),
         Err(_) => {
-            let data: Me = client
+            let data: api::schema::Me = client
                 .get("https://www.pivotaltracker.com/services/v5/me")
                 .send()
                 .await?
