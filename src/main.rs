@@ -14,7 +14,7 @@ use mdcat::push_tty;
 use mdcat::terminal::TerminalProgram;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
-use serde::{Deserialize};
+use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 use slugify::slugify;
 
@@ -108,12 +108,8 @@ enum Commands {
 
     /// Recent things you have done on tracker
     Activity {},
-    // ideas:
-    // standup
-    // - lists stories recently completed
-    // - recent commits to main branch
-
-    // cache clear
+    // future commands:
+    // - cache clear (handle changes to tracker Me record)
 }
 
 #[derive(Args)]
@@ -534,11 +530,18 @@ pub async fn mine(json: bool) -> anyhow::Result<String> {
         })
         .collect();
 
-    let (terminal_size::Width(term_width), terminal_size::Height(_height)) =
-        terminal_size::terminal_size().unwrap();
-    let width = term_width as usize; // todo why casting?
-    let name_wrap = match width > 80 {
-        true => 44 + (width - 80),
+    let size = terminal_size::terminal_size();
+
+    let term_width: usize = match size {
+        Some(size_v) => {
+            let (terminal_size::Width(w), _) = size_v;
+            w.into()
+        }
+        None => 120,
+    };
+
+    let name_wrap: usize = match term_width > 80 {
+        true => 44 + (term_width - 80),
         false => 44,
     };
 
