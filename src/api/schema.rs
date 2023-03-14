@@ -94,3 +94,29 @@ pub struct Me {
     pub username: String,
     pub email: String,
 }
+
+/// example error:
+///
+/// {
+///   "code": "unfound_resource",
+///   "kind": "error",
+///   "error": "The object you tried to access could not be found.  It may have been removed by another user, you may be using the ID of another object type, or you may be trying to access a sub-resource at the wrong point in a tree."
+/// }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiError {
+    #[serde(rename = "code")]
+    pub code: String,
+
+    #[serde(rename = "kind")]
+    pub kind: String,
+
+    #[serde(rename = "error")]
+    pub error: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MaybeStoryDetail {
+    StoryDetail(StoryDetail),
+    ApiError(ApiError)
+}

@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 // dear reader:
 //
 // the following is my 2nd rust program, and it panics less than my first one,
@@ -9,10 +11,8 @@ use chrono::{DateTime, Local};
 use clap::{Args, Parser, Subcommand};
 use colored::*;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use mdcat::push_tty;
 use mdcat::terminal::TerminalProgram;
-use regex::Regex;
 use reqwest::header::USER_AGENT;
 use serde::Deserialize;
 use serde_json::{Map, Number, Value};
@@ -177,7 +177,7 @@ async fn main() -> Result<()> {
 
 pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<String> {
     let story_id = match pr_args.story_id {
-        Some(id) => id.to_string(),
+        Some(id) => id,
         None => read_branch_id()?,
     };
 
@@ -186,6 +186,7 @@ pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<String> {
         "https://www.pivotaltracker.com/services/v5/projects/{}/stories/{}",
         project_id, story_id
     );
+
     let client = tracker_api_client().await?;
     let story: api::schema::StoryDetail = client.get(&story_url).send().await?.json().await?;
 
@@ -257,7 +258,7 @@ pub async fn branch(
         None => data.name,
     };
 
-    let branch_name = format!("{}-{}", slugify!(&name_formatted, max_length = 30), data.id,);
+    let branch_name = format!("{}-{}", slugify!(&name_formatted, max_length = 30), data.id);
 
     let git_result = Command::new("git")
         .arg("switch")
@@ -271,7 +272,7 @@ pub async fn branch(
                 format!("checked out branch successfully: {}", branch_name)
             } else {
                 format!(
-                    "🔥 git operation failed, you will need to check out the branch manually: \n{}",
+                    "🔥 creating git branch failed, does it already exist? try\n\n\tgit switch {}",
                     branch_name
                 )
             }
@@ -304,7 +305,6 @@ pub async fn branch(
         return Err(anyhow!(format!("{}\n\n{}", status, response_text)));
     };
 
-    // let data: &StoryDetail = &response.json().await?;
     let data = serde_json::from_str::<api::schema::StoryDetail>(&response_text)?;
 
     // TODO: if a feature is not pointed, there will be a serialization error here
@@ -427,7 +427,7 @@ async fn activity() -> anyhow::Result<String> {
 
 pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
     let branch_id = match story_id {
-        Some(id) => id.to_string(),
+        Some(id) => id,
         None => read_branch_id()?,
     };
 
@@ -446,11 +446,22 @@ pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
         project_id, branch_id
     );
 
-    let data: api::schema::StoryDetail = client.get(url).send().await?.json().await?;
+    // let response_text = client.get(&url).send().await?.text().await?;
+    // println!("{}", response_text);
+    let data: api::schema::MaybeStoryDetail = client.get(url).send().await?.json().await?;
 
-    let doc = format!("# {}\n\n{}", data.name, data.description);
-
-    print_markdown(&doc)?;
+    match data {
+        api::schema::MaybeStoryDetail::StoryDetail(sd) => {
+            let doc = format!("# {}\n\n{}", sd.name, sd.description);
+            print_markdown(&doc)?;
+        }
+        api::schema::MaybeStoryDetail::ApiError(why) => {
+            return Err(anyhow::anyhow!(format!(
+                "tracker api error: {}\n\n{}",
+                why.code, why.error
+            )))
+        }
+    }
 
     Ok("".to_string())
 }
@@ -604,7 +615,7 @@ pub fn read_api_token() -> anyhow::Result<String> {
     Ok(token_file_contents.trim().to_string())
 }
 
-pub fn read_branch_id() -> anyhow::Result<String> {
+pub fn read_branch_id() -> anyhow::Result<u64> {
     // possible enhancement: drag in a git crate to do this, and can likely
     // a) get this from any dir in the git repo
     // b) possibly avoid shelling out to git to create new branches
@@ -648,12 +659,17 @@ pub fn branch_name(head_contents: &str) -> Option<String> {
     )
 }
 
-pub fn extract_id(branch_name: &str) -> Option<String> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r"(?P<story_id>\d+)").unwrap();
-    }
-    RE.captures(branch_name)
-        .and_then(|cap| cap.name("story_id").map(|bid| bid.as_str().to_string()))
+pub fn extract_id(branch_name: &str) -> Option<u64> {
+    // lazy_static! {
+    //     static ref RE: Regex = Regex::new(r"(?P<story_id>\d+)").unwrap();
+    // }
+    // RE.captures(branch_name)
+    //     .and_then(|cap| cap.name("story_id").map(|bid| bid.as_str().to_string()))
+
+    branch_name
+        .split(|c: char| !c.is_numeric())
+        .filter_map(|s| s.parse::<u64>().ok())
+        .last()
 }
 
 #[cfg(test)]
@@ -671,8 +687,9 @@ mod tests {
 
     #[test]
     fn test_extract_id() {
-        assert_eq!(extract_id("123-yep"), Some("123".to_string()));
-        assert_eq!(extract_id("123-456-yep"), Some("123".to_string()));
+        assert_eq!(extract_id("yep-123"), Some(123));
+        assert_eq!(extract_id("yep-24-123"), Some(123));
+        assert_eq!(extract_id("123-456-yep"), Some(456));
         assert_eq!(extract_id("foobar"), None);
     }
 }
