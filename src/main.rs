@@ -71,14 +71,7 @@ enum PrField {
 enum Commands {
     /// Displays the current story, also aliased as "show"
     #[clap(alias = "show")]
-    View {
-        /// Optionally provide a story id, otherwise find it in the current git branch
-        story_id: Option<u64>,
-
-        /// Open the story in a web browser
-        #[arg(short, long)]
-        web: bool,
-    },
+    View(ViewArgs),
 
     /// Checks out a git branch and changes the story's state to started
     #[clap(alias = "br")]
@@ -110,6 +103,16 @@ enum Commands {
     Activity {},
     // future commands:
     // - cache clear (handle changes to tracker Me record)
+}
+
+#[derive(Args)]
+pub struct ViewArgs {
+    /// Optionally provide a story id, otherwise find it in the current git branch
+    story_id: Option<u64>,
+
+    /// Open the story in a web browser
+    #[arg(short, long)]
+    web: bool,
 }
 
 #[derive(Args)]
@@ -145,7 +148,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::View { story_id, web }) => print_result(view(*story_id, *web).await),
+        Some(Commands::View(view_args)) => print_result(view(view_args).await),
         Some(Commands::Mine { json }) => {
             print_result(mine(*json).await);
         }
@@ -425,13 +428,13 @@ async fn activity() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<()> {
-    let branch_id = match story_id {
+pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
+    let branch_id = match view_args.story_id {
         Some(id) => id,
         None => read_branch_id()?,
     };
 
-    if web {
+    if view_args.web {
         let url = format!("https://www.pivotaltracker.com/story/show/{}", branch_id);
         webbrowser::open(&url)?;
         println!("opened {}", url);
