@@ -21,9 +21,9 @@ use slugify::slugify;
 use mdcat::Settings;
 use pulldown_cmark::Options;
 use syntect::parsing::SyntaxSet;
-use tabled::object::Columns;
+use tabled::object::{Columns, Rows};
 use tabled::style::{Style, VerticalLine};
-use tabled::{object::Rows, Modify, Table, Tabled, Width};
+use tabled::{Disable, Modify, Table, Tabled, Width};
 
 use anyhow::{anyhow, Context, Result};
 use reqwest::header;
@@ -92,44 +92,6 @@ enum Commands {
     // - cache clear (handle changes to tracker Me record)
 }
 
-#[derive(Args)]
-pub struct ViewArgs {
-    /// Optionally provide a story id, otherwise find it in the current git branch
-    story_id: Option<u64>,
-
-    /// Open the story in a web browser
-    #[arg(short, long)]
-    web: bool,
-}
-
-#[derive(Args)]
-pub struct BranchArgs {
-    story_id: u64,
-
-    /// Optionally provide a different branch name prefix, defaults to story name
-    #[arg(short, long)]
-    name: Option<String>,
-
-    #[arg(short, long)]
-    estimate: Option<u8>,
-}
-
-#[derive(Args)]
-pub struct PrArgs {
-    #[arg(value_enum)]
-    field: PrField,
-
-    /// Optionally provide a story id, otherwise find it in the current git branch
-    story_id: Option<u64>,
-}
-
-#[derive(Args)]
-pub struct MineArgs {
-    /// Print json response
-    #[arg(short, long)]
-    json: bool,
-}
-
 #[derive(Debug, Deserialize)]
 struct ProjectConfig {
     project_id: u64,
@@ -176,6 +138,15 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[derive(Args)]
+pub struct PrArgs {
+    #[arg(value_enum)]
+    field: PrField,
+
+    /// Optionally provide a story id, otherwise find it in the current git branch
+    story_id: Option<u64>,
 }
 
 pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
@@ -238,6 +209,17 @@ pub async fn tracker_api_client() -> anyhow::Result<reqwest::Client> {
     Ok(client)
 }
 
+#[derive(Args)]
+pub struct BranchArgs {
+    story_id: u64,
+
+    /// Optionally provide a different branch name prefix, defaults to story name
+    #[arg(short, long)]
+    name: Option<String>,
+
+    #[arg(short, long)]
+    estimate: Option<u8>,
+}
 pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
@@ -367,6 +349,7 @@ async fn activity() -> anyhow::Result<()> {
 
     activities
         .into_iter()
+        .rev()
         .filter(|a| a.project.id == project_id)
         .filter(|a| a.kind == "story_update_activity")
         .group_by(|a| {
@@ -384,12 +367,7 @@ async fn activity() -> anyhow::Result<()> {
                         .partial_cmp(&b.primary_resources[0].id)
                         .unwrap()
                 })
-                .group_by(|a| {
-                    format!(
-                        "{} {}",
-                        a.primary_resources[0].id, a.primary_resources[0].name
-                    )
-                })
+                .group_by(|a| a.primary_resources[0].name.to_string())
                 .into_iter()
                 .for_each(|(story_label, activities_for_story)| {
                     let highlights = activities_for_story
@@ -411,19 +389,35 @@ async fn activity() -> anyhow::Result<()> {
 
             let mut table = Table::new(&rows);
 
-            let (terminal_size::Width(width), terminal_size::Height(_height)) =
-                terminal_size::terminal_size().unwrap();
+            table.with(
+                Modify::new(Columns::first())
+                    .with(Width::wrap(60).keep_words())
+                    .with(Width::increase(60)),
+            );
 
-            table.with(Modify::new(Columns::first()).with(Width::wrap(60).keep_words()));
-            table.with(Modify::new(Columns::last()).with(Width::wrap(30).keep_words()));
+            table.with(
+                Modify::new(Columns::last())
+                    .with(Width::wrap(30).keep_words())
+                    .with(Width::increase(30)),
+            );
 
-            table
-                .with(Style::modern())
-                .with(Width::wrap(width as usize).keep_words())
-                .with(Width::increase(width as usize));
+            table.with(Style::modern());
+            table.with(Disable::row(Rows::new(..1)));
+
+            println!("{}\n", table);
         });
 
     Ok(())
+}
+
+#[derive(Args)]
+pub struct ViewArgs {
+    /// Optionally provide a story id, otherwise find it in the current git branch
+    story_id: Option<u64>,
+
+    /// Open the story in a web browser
+    #[arg(short, long)]
+    web: bool,
 }
 
 pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
@@ -479,6 +473,13 @@ fn format_current_state(state: &StoryState) -> ColoredString {
         StoryState::Accepted => "☑☑☑".green(),
         StoryState::Rejected => "☑☑☒".red(),
     }
+}
+
+#[derive(Args)]
+pub struct MineArgs {
+    /// Print json response
+    #[arg(short, long)]
+    json: bool,
 }
 
 pub async fn mine(mine_args: &MineArgs) -> anyhow::Result<()> {
