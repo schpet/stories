@@ -220,6 +220,7 @@ pub struct BranchArgs {
     #[arg(short, long)]
     estimate: Option<u8>,
 }
+
 pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
@@ -328,15 +329,15 @@ async fn tracker_me() -> anyhow::Result<api::schema::Me> {
     }
 }
 
-#[derive(Tabled, Debug)]
-struct ActivityRow {
-    #[tabled(rename = "Story")]
-    name: String,
-    #[tabled(rename = "Changes")]
-    highlights: String,
-}
-
 async fn activity() -> anyhow::Result<()> {
+    #[derive(Tabled, Debug)]
+    struct ActivityRow {
+        #[tabled(rename = "Story")]
+        name: String,
+        #[tabled(rename = "Changes")]
+        highlights: String,
+    }
+
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
 
@@ -460,19 +461,6 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-fn format_current_state(state: &StoryState) -> ColoredString {
-    match state {
-        StoryState::Planned => "---".black(),
-        StoryState::Unscheduled => "---".black(),
-        StoryState::Unstarted => "···".black(),
-        StoryState::Started => "☐☐☐".blue(),
-        StoryState::Finished => "☑☐☐".cyan(),
-        StoryState::Delivered => "☑☑☐".green(),
-        StoryState::Accepted => "☑☑☑".green(),
-        StoryState::Rejected => "☑☑☒".red(),
-    }
 }
 
 #[derive(Args)]
@@ -723,4 +711,17 @@ fn print_markdown(text: &str) -> anyhow::Result<()> {
             Err(anyhow!("Cannot render markdown to stdout: {:?}", error))
         }
     })
+}
+
+fn format_current_state(state: &StoryState) -> ColoredString {
+    match state {
+        StoryState::Planned => "---".black(),
+        StoryState::Unscheduled => "---".black(),
+        StoryState::Unstarted => "···".black(),
+        StoryState::Started => "☐☐☐".blue(),
+        StoryState::Finished => "☑☐☐".cyan(),
+        StoryState::Delivered => "☑☑☐".green(),
+        StoryState::Accepted => "☑☑☑".green(),
+        StoryState::Rejected => "☑☑☒".red(),
+    }
 }
