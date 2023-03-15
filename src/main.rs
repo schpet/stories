@@ -116,7 +116,9 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::View(view_args)) => print_result(view(view_args).await),
+        Some(Commands::View(view_args)) => {
+            print_result(view(view_args).await);
+        }
         Some(Commands::Mine(mine_args)) => {
             print_result(mine(mine_args).await);
         }
@@ -129,7 +131,6 @@ async fn main() -> Result<()> {
         Some(Commands::Pr(pr_args)) => {
             print_result(pull_request(pr_args).await);
         }
-
         Some(Commands::Activity {}) => {
             print_result(activity().await);
         }
