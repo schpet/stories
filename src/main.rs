@@ -75,16 +75,7 @@ enum Commands {
 
     /// Checks out a git branch and changes the story's state to started
     #[clap(alias = "br")]
-    Branch {
-        story_id: u64,
-
-        /// Optionally provide a different branch name prefix, defaults to story name
-        #[arg(short, long)]
-        name: Option<String>,
-
-        #[arg(short, long)]
-        estimate: Option<u8>,
-    },
+    Branch(BranchArgs),
 
     /// Print out suggested pull request title or body
     Pr(PrArgs),
@@ -113,6 +104,18 @@ pub struct ViewArgs {
     /// Open the story in a web browser
     #[arg(short, long)]
     web: bool,
+}
+
+#[derive(Args)]
+pub struct BranchArgs {
+    story_id: u64,
+
+    /// Optionally provide a different branch name prefix, defaults to story name
+    #[arg(short, long)]
+    name: Option<String>,
+
+    #[arg(short, long)]
+    estimate: Option<u8>,
 }
 
 #[derive(Args)]
@@ -155,12 +158,8 @@ async fn main() -> Result<()> {
         Some(Commands::Whoami {}) => {
             print_result(whoami().await);
         }
-        Some(Commands::Branch {
-            story_id,
-            name,
-            estimate,
-        }) => {
-            print_result(branch(*story_id, name, *estimate).await);
+        Some(Commands::Branch(branch_args)) => {
+            print_result(branch(branch_args).await);
         }
         Some(Commands::Pr(pr_args)) => {
             print_result(pull_request(pr_args).await);
@@ -237,16 +236,14 @@ pub async fn tracker_api_client() -> anyhow::Result<reqwest::Client> {
 }
 
 pub async fn branch(
-    story_id: u64,
-    name: &Option<String>,
-    estimate: Option<u8>,
+    branch_args: &BranchArgs
 ) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
 
     let story_url = format!(
         "https://www.pivotaltracker.com/services/v5/projects/{}/stories/{}",
-        project_id, story_id
+        project_id, branch_args.story_id
     );
 
     let data: api::schema::StoryDetail = client.get(&story_url).send().await?.json().await?;
@@ -259,7 +256,7 @@ pub async fn branch(
     //     StoryType::Release => "release",
     // };
 
-    let name_formatted = match &name {
+    let name_formatted = match &branch_args.name {
         Some(val) => format!("-{}", val),
         None => data.name,
     };
@@ -295,10 +292,10 @@ pub async fn branch(
         Value::String("started".to_string()),
     );
 
-    if estimate.is_some() {
+    if branch_args.estimate.is_some() {
         map.insert(
             "estimate".to_string(),
-            Value::Number(Number::from(estimate.unwrap())),
+            Value::Number(Number::from(branch_args.estimate.unwrap())),
         );
     }
 
