@@ -21,7 +21,6 @@ use slugify::slugify;
 use mdcat::Settings;
 use pulldown_cmark::Options;
 use syntect::parsing::SyntaxSet;
-use tabled::merge::Merge;
 use tabled::object::Columns;
 use tabled::style::{Style, VerticalLine};
 use tabled::{object::Rows, Modify, Table, Tabled, Width};
@@ -127,10 +126,9 @@ struct ProjectConfig {
     project_id: u64,
 }
 
-fn print_result(result: Result<String, anyhow::Error>) {
+fn print_result(result: Result<(), anyhow::Error>) {
     match result {
-        Ok(value) => {
-            println!("{}", value);
+        Ok(_) => {
             std::process::exit(0);
         }
         Err(err) => {
@@ -175,7 +173,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<String> {
+pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
     let story_id = match pr_args.story_id {
         Some(id) => id,
         None => read_branch_id()?,
@@ -200,15 +198,20 @@ pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<String> {
                     [delivers #{}]"#},
                 story.name, story.url, story.id,
             );
-            Ok(message)
+            println!("{}", message);
+            Ok(())
         }
-        PrField::Title => Ok(story.name),
+        PrField::Title => {
+            println!("{}", story.name);
+            Ok(())
+        }
     }
 }
 
-pub async fn whoami() -> anyhow::Result<String> {
+pub async fn whoami() -> anyhow::Result<()> {
     let data = tracker_me().await?;
-    Ok(format!("you: {}", data.email))
+    println!("{:?}", data);
+    Ok(())
 }
 
 pub async fn tracker_api_client() -> anyhow::Result<reqwest::Client> {
@@ -234,7 +237,7 @@ pub async fn branch(
     story_id: u64,
     name: &Option<String>,
     estimate: Option<u8>,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
 
@@ -309,7 +312,9 @@ pub async fn branch(
 
     // TODO: if a feature is not pointed, there will be a serialization error here
 
-    Ok(format!("{}\nupdated story {}", git_message, data.id))
+    println!("{}\nupdated story {}", git_message, data.id);
+
+    Ok(())
 }
 
 async fn tracker_me() -> anyhow::Result<api::schema::Me> {
@@ -342,15 +347,13 @@ async fn tracker_me() -> anyhow::Result<api::schema::Me> {
 
 #[derive(Tabled, Debug)]
 struct ActivityRow {
-    #[tabled(rename = "Date")]
-    date: String,
     #[tabled(rename = "Story")]
     name: String,
     #[tabled(rename = "Changes")]
     highlights: String,
 }
 
-async fn activity() -> anyhow::Result<String> {
+async fn activity() -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
 
@@ -360,8 +363,6 @@ async fn activity() -> anyhow::Result<String> {
         .await?
         .json()
         .await?;
-
-    let mut rows: Vec<ActivityRow> = Vec::new();
 
     activities
         .into_iter()
@@ -373,6 +374,8 @@ async fn activity() -> anyhow::Result<String> {
         })
         .into_iter()
         .for_each(|(date, activities_by_date)| {
+            println!("{}", date.format("%a %b %d").to_string());
+            let mut rows: Vec<ActivityRow> = Vec::new();
             activities_by_date
                 .sorted_by(|a, b| {
                     a.primary_resources[0]
@@ -400,32 +403,29 @@ async fn activity() -> anyhow::Result<String> {
                         .join(", ");
 
                     rows.push(ActivityRow {
-                        date: date.format("%a %b %d").to_string(),
                         name: story_label,
                         highlights,
                     });
                 });
+
+            let mut table = Table::new(&rows);
+
+            let (terminal_size::Width(width), terminal_size::Height(_height)) =
+                terminal_size::terminal_size().unwrap();
+
+            table.with(Modify::new(Columns::first()).with(Width::wrap(60).keep_words()));
+            table.with(Modify::new(Columns::last()).with(Width::wrap(30).keep_words()));
+
+            table
+                .with(Style::modern())
+                .with(Width::wrap(width as usize).keep_words())
+                .with(Width::increase(width as usize));
         });
 
-    let mut table = Table::new(&rows);
-
-    let (terminal_size::Width(width), terminal_size::Height(_height)) =
-        terminal_size::terminal_size().unwrap();
-
-    // table.with(Modify::new(Columns::first()).with(Width::increase(15)).with(Width::wrap(15)));
-    table.with(Modify::new(Columns::last()).with(Width::wrap(30).keep_words()));
-
-    table
-        .with(Merge::horizontal())
-        .with(Merge::vertical())
-        .with(Style::modern())
-        .with(Width::wrap(width as usize).keep_words())
-        .with(Width::increase(width as usize));
-
-    Ok(table.to_string())
+    Ok(())
 }
 
-pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
+pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<()> {
     let branch_id = match story_id {
         Some(id) => id,
         None => read_branch_id()?,
@@ -434,7 +434,8 @@ pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
     if web {
         let url = format!("https://www.pivotaltracker.com/story/show/{}", branch_id);
         webbrowser::open(&url)?;
-        return Ok(format!("opened {}", url));
+        println!("opened {}", url);
+        return Ok(());
     }
 
     let client = tracker_api_client().await?;
@@ -463,7 +464,7 @@ pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
         }
     }
 
-    Ok("".to_string())
+    Ok(())
 }
 
 fn format_current_state(state: &StoryState) -> ColoredString {
@@ -479,7 +480,7 @@ fn format_current_state(state: &StoryState) -> ColoredString {
     }
 }
 
-pub async fn mine(json: bool) -> anyhow::Result<String> {
+pub async fn mine(json: bool) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
     let me = tracker_me().await?;
@@ -493,7 +494,8 @@ pub async fn mine(json: bool) -> anyhow::Result<String> {
     let response = client.get(url).send().await?;
 
     if json {
-        return Ok(response.text().await?);
+        println!("{}", response.text().await?);
+        return Ok(());
     }
 
     let data: Vec<api::schema::Story> = response.json().await?;
@@ -566,7 +568,8 @@ pub async fn mine(json: bool) -> anyhow::Result<String> {
         .with(style)
         .with(Modify::new(Rows::new(1..)).with(Width::wrap(name_wrap).keep_words()));
 
-    Ok(table.to_string())
+    println!("{}", table.to_string());
+    Ok(())
 }
 
 pub fn read_project_id() -> anyhow::Result<u64> {
