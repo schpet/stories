@@ -81,11 +81,7 @@ enum Commands {
     Pr(PrArgs),
 
     /// Stories assigned to you
-    Mine {
-        /// Print json response
-        #[arg(short, long)]
-        json: bool,
-    },
+    Mine(MineArgs),
 
     /// Currently authenticated user
     Whoami {},
@@ -127,6 +123,13 @@ pub struct PrArgs {
     story_id: Option<u64>,
 }
 
+#[derive(Args)]
+pub struct MineArgs {
+    /// Print json response
+    #[arg(short, long)]
+    json: bool,
+}
+
 #[derive(Debug, Deserialize)]
 struct ProjectConfig {
     project_id: u64,
@@ -152,8 +155,8 @@ async fn main() -> Result<()> {
 
     match &cli.command {
         Some(Commands::View(view_args)) => print_result(view(view_args).await),
-        Some(Commands::Mine { json }) => {
-            print_result(mine(*json).await);
+        Some(Commands::Mine(mine_args)) => {
+            print_result(mine(mine_args).await);
         }
         Some(Commands::Whoami {}) => {
             print_result(whoami().await);
@@ -235,9 +238,7 @@ pub async fn tracker_api_client() -> anyhow::Result<reqwest::Client> {
     Ok(client)
 }
 
-pub async fn branch(
-    branch_args: &BranchArgs
-) -> anyhow::Result<()> {
+pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
 
@@ -480,7 +481,7 @@ fn format_current_state(state: &StoryState) -> ColoredString {
     }
 }
 
-pub async fn mine(json: bool) -> anyhow::Result<()> {
+pub async fn mine(mine_args: &MineArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
     let me = tracker_me().await?;
@@ -493,7 +494,7 @@ pub async fn mine(json: bool) -> anyhow::Result<()> {
 
     let response = client.get(url).send().await?;
 
-    if json {
+    if mine_args.json {
         println!("{}", response.text().await?);
         return Ok(());
     }
