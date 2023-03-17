@@ -64,3 +64,13 @@ throw `alias s=stories` in your ~/.zshrc ~/.bashrc for good measure.
    ```json
    { "project_id": 1234 }
    ```
+
+## Development
+
+### Releasing a new version
+
+```console
+cargo release -x --no-publish patch
+cargo release -x --no-publish minor
+cargo release -x --no-publish major
+```
