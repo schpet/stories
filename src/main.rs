@@ -420,6 +420,10 @@ pub struct ViewArgs {
     /// Open the story in a web browser
     #[arg(short, long)]
     web: bool,
+
+    /// Print json response
+    #[arg(short, long)]
+    json: bool,
 }
 
 pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
@@ -444,9 +448,14 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
         project_id, branch_id
     );
 
-    // let response_text = client.get(&url).send().await?.text().await?;
-    // println!("{}", response_text);
-    let data: api::schema::MaybeStoryDetail = client.get(url).send().await?.json().await?;
+    let response = client.get(url).send().await?;
+
+    if view_args.json {
+        println!("{}", response.text().await?);
+        return Ok(());
+    }
+
+    let data: api::schema::MaybeStoryDetail = response.json().await?;
 
     match data {
         api::schema::MaybeStoryDetail::StoryDetail(sd) => {
