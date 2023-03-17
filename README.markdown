@@ -29,6 +29,10 @@ stories activity
 stories --help
 ```
 
+## Notes
+
+- this assumes you use tracker's [github integration](https://www.pivotaltracker.com/help/articles/github_integration/) and deliver stories [via commit messages](https://www.pivotaltracker.com/help/articles/github_integration/#using-the-github-integration-commits)
+
 ## Installation
 
 Homebrew (mac):
@@ -56,7 +60,7 @@ throw `alias s=stories` in your ~/.zshrc ~/.bashrc for good measure.
    mkdir -p ~/.config/stories
    echo $YOUR_TRACKER_API_TOKEN > ~/.config/stories/tracker_api_token.txt
    ```
-3. drop a `stories.json` file in your project directory with a tracker project id, e.g. 
+3. drop a `stories.json` file in your project directory with a tracker project id, e.g.
    ```json
-   {"project_id":1234}
+   { "project_id": 1234 }
    ```
