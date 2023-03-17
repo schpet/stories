@@ -1,24 +1,29 @@
+#![forbid(unsafe_code)]
+
+// dear reader:
+//
+// the following is my 2nd rust program, and it panics less than my first one,
+// but is still very amateur level stuff and thrown together without much
+// consideration for aesthetics.
+
 use api::schema::{StoryState, StoryType};
 use chrono::{DateTime, Local};
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use colored::*;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use mdcat::push_tty;
 use mdcat::terminal::TerminalProgram;
-use regex::Regex;
 use reqwest::header::USER_AGENT;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 use slugify::slugify;
 
 use mdcat::Settings;
 use pulldown_cmark::Options;
 use syntect::parsing::SyntaxSet;
-use tabled::merge::Merge;
-use tabled::object::Columns;
+use tabled::object::{Columns, Rows};
 use tabled::style::{Style, VerticalLine};
-use tabled::{object::Rows, Modify, Table, Tabled, Width};
+use tabled::{Disable, Modify, Table, Tabled, Width};
 
 use anyhow::{anyhow, Context, Result};
 use reqwest::header;
@@ -52,14 +57,6 @@ struct StoryRow {
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    // /// Sets a custom config file
-    // #[arg(short, long, value_name = "FILE")]
-
-    // config: Option<PathBuf>,
-    /// Turn debugging information on
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    debug: u8,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -74,54 +71,25 @@ enum PrField {
 enum Commands {
     /// Displays the current story, also aliased as "show"
     #[clap(alias = "show")]
-    View {
-        /// Optionally provide a story id, otherwise find it in the current git branch
-        story_id: Option<u64>,
-
-        /// Open the story in a web browser
-        #[arg(short, long)]
-        web: bool,
-    },
+    View(ViewArgs),
 
     /// Checks out a git branch and changes the story's state to started
-    Branch {
-        story_id: u64,
-
-        /// Optionally provide a different branch name prefix, defaults to story name
-        #[arg(short, long)]
-        name: Option<String>,
-
-        #[arg(short, long)]
-        estimate: Option<u8>,
-    },
+    #[clap(alias = "br")]
+    Branch(BranchArgs),
 
     /// Print out suggested pull request title or body
-    Pr {
-        #[arg(value_enum)]
-        field: PrField,
-
-        /// Optionally provide a story id, otherwise find it in the current git branch
-        story_id: Option<u64>,
-    },
+    Pr(PrArgs),
 
     /// Stories assigned to you
-    Mine {
-        /// Print json response
-        #[arg(short, long)]
-        json: bool,
-    },
+    Mine(MineArgs),
 
     /// Currently authenticated user
     Whoami {},
 
     /// Recent things you have done on tracker
     Activity {},
-    // ideas:
-    // standup
-    // - lists stories recently completed
-    // - recent commits to main branch
-
-    // cache clear
+    // future commands:
+    // - cache clear (handle changes to tracker Me record)
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,10 +97,9 @@ struct ProjectConfig {
     project_id: u64,
 }
 
-fn print_result(result: Result<String, anyhow::Error>) {
+fn print_result(result: Result<(), anyhow::Error>) {
     match result {
-        Ok(value) => {
-            println!("{}", value);
+        Ok(_) => {
             std::process::exit(0);
         }
         Err(err) => {
@@ -149,27 +116,21 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::View { story_id, web }) => print_result(view(*story_id, *web).await),
-        Some(Commands::Mine { json }) => {
-            print_result(mine(*json).await);
+        Some(Commands::View(view_args)) => {
+            print_result(view(view_args).await);
+        }
+        Some(Commands::Mine(mine_args)) => {
+            print_result(mine(mine_args).await);
         }
         Some(Commands::Whoami {}) => {
             print_result(whoami().await);
         }
-        Some(Commands::Branch {
-            story_id,
-            name,
-            estimate,
-        }) => {
-            print_result(branch(*story_id, name, *estimate).await);
+        Some(Commands::Branch(branch_args)) => {
+            print_result(branch(branch_args).await);
         }
-        Some(Commands::Pr {
-            field: _,
-            story_id: _,
-        }) => {
-            todo!()
+        Some(Commands::Pr(pr_args)) => {
+            print_result(pull_request(pr_args).await);
         }
-
         Some(Commands::Activity {}) => {
             print_result(activity().await);
         }
@@ -180,18 +141,54 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Me {
-    id: u64,
-    name: String,
-    initials: String,
-    username: String,
-    email: String,
+#[derive(Args)]
+pub struct PrArgs {
+    #[arg(value_enum)]
+    field: PrField,
+
+    /// Optionally provide a story id, otherwise find it in the current git branch
+    story_id: Option<u64>,
 }
 
-pub async fn whoami() -> anyhow::Result<String> {
+pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
+    let story_id = match pr_args.story_id {
+        Some(id) => id,
+        None => read_branch_id()?,
+    };
+
+    let project_id = read_project_id()?;
+    let story_url = format!(
+        "https://www.pivotaltracker.com/services/v5/projects/{}/stories/{}",
+        project_id, story_id
+    );
+
+    let client = tracker_api_client().await?;
+    let story: api::schema::StoryDetail = client.get(&story_url).send().await?.json().await?;
+
+    match pr_args.field {
+        PrField::Body => {
+            let message = format!(
+                indoc! {r#"
+                    {}
+
+                    {}
+                    [delivers #{}]"#},
+                story.name, story.url, story.id,
+            );
+            println!("{}", message);
+            Ok(())
+        }
+        PrField::Title => {
+            println!("{}", story.name);
+            Ok(())
+        }
+    }
+}
+
+pub async fn whoami() -> anyhow::Result<()> {
     let data = tracker_me().await?;
-    Ok(format!("you: {}", data.email))
+    println!("{:?}", data);
+    Ok(())
 }
 
 pub async fn tracker_api_client() -> anyhow::Result<reqwest::Client> {
@@ -213,17 +210,25 @@ pub async fn tracker_api_client() -> anyhow::Result<reqwest::Client> {
     Ok(client)
 }
 
-pub async fn branch(
+#[derive(Args)]
+pub struct BranchArgs {
     story_id: u64,
-    name: &Option<String>,
+
+    /// Optionally provide a different branch name prefix, defaults to story name
+    #[arg(short, long)]
+    name: Option<String>,
+
+    #[arg(short, long)]
     estimate: Option<u8>,
-) -> anyhow::Result<String> {
+}
+
+pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
 
     let story_url = format!(
         "https://www.pivotaltracker.com/services/v5/projects/{}/stories/{}",
-        project_id, story_id
+        project_id, branch_args.story_id
     );
 
     let data: api::schema::StoryDetail = client.get(&story_url).send().await?.json().await?;
@@ -236,24 +241,35 @@ pub async fn branch(
     //     StoryType::Release => "release",
     // };
 
-    let name_formatted = match &name {
+    let name_formatted = match &branch_args.name {
         Some(val) => format!("-{}", val),
         None => data.name,
     };
 
-    let branch_name = format!("{}-{}", slugify!(&name_formatted, max_length = 30), data.id,);
+    let branch_name = format!("{}-{}", slugify!(&name_formatted, max_length = 30), data.id);
 
     let git_result = Command::new("git")
         .arg("switch")
         .arg("-c")
         .arg(&branch_name)
-        .spawn()?
-        .wait();
+        .output();
 
-    // nicer way of doing this?
-    if git_result.is_err() {
-        return Err(git_result.unwrap_err().into());
-    }
+    let git_message = match git_result {
+        Ok(result) => {
+            if result.status.success() {
+                format!("checked out branch successfully: {}", branch_name)
+            } else {
+                format!(
+                    "🔥 creating git branch failed, does it already exist? try\n\n\tgit switch {}",
+                    branch_name
+                )
+            }
+        }
+        Err(err) => {
+            // this right?
+            return Err(err.into());
+        }
+    };
 
     let mut map = Map::new();
     map.insert(
@@ -261,10 +277,10 @@ pub async fn branch(
         Value::String("started".to_string()),
     );
 
-    if estimate.is_some() {
+    if branch_args.estimate.is_some() {
         map.insert(
             "estimate".to_string(),
-            Value::Number(Number::from(estimate.unwrap())),
+            Value::Number(Number::from(branch_args.estimate.unwrap())),
         );
     }
 
@@ -277,18 +293,16 @@ pub async fn branch(
         return Err(anyhow!(format!("{}\n\n{}", status, response_text)));
     };
 
-    // let data: &StoryDetail = &response.json().await?;
     let data = serde_json::from_str::<api::schema::StoryDetail>(&response_text)?;
 
     // TODO: if a feature is not pointed, there will be a serialization error here
 
-    Ok(format!(
-        "updated story {} and checked out branch '{}'",
-        data.id, branch_name
-    ))
+    println!("{}\nupdated story {}", git_message, data.id);
+
+    Ok(())
 }
 
-async fn tracker_me() -> anyhow::Result<Me> {
+async fn tracker_me() -> anyhow::Result<api::schema::Me> {
     let token = read_api_token()?;
     let client = tracker_api_client().await?;
 
@@ -300,7 +314,7 @@ async fn tracker_me() -> anyhow::Result<Me> {
     match &cached {
         Ok(cached) => Ok(serde_json::from_slice(cached)?),
         Err(_) => {
-            let data: Me = client
+            let data: api::schema::Me = client
                 .get("https://www.pivotaltracker.com/services/v5/me")
                 .send()
                 .await?
@@ -316,17 +330,15 @@ async fn tracker_me() -> anyhow::Result<Me> {
     }
 }
 
-#[derive(Tabled, Debug)]
-struct ActivityRow {
-    #[tabled(rename = "Date")]
-    date: String,
-    #[tabled(rename = "Story")]
-    name: String,
-    #[tabled(rename = "Changes")]
-    highlights: String,
-}
+async fn activity() -> anyhow::Result<()> {
+    #[derive(Tabled, Debug)]
+    struct ActivityRow {
+        #[tabled(rename = "Story")]
+        name: String,
+        #[tabled(rename = "Changes")]
+        highlights: String,
+    }
 
-async fn activity() -> anyhow::Result<String> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
 
@@ -337,10 +349,9 @@ async fn activity() -> anyhow::Result<String> {
         .json()
         .await?;
 
-    let mut rows: Vec<ActivityRow> = Vec::new();
-
     activities
         .into_iter()
+        .rev()
         .filter(|a| a.project.id == project_id)
         .filter(|a| a.kind == "story_update_activity")
         .group_by(|a| {
@@ -349,6 +360,8 @@ async fn activity() -> anyhow::Result<String> {
         })
         .into_iter()
         .for_each(|(date, activities_by_date)| {
+            println!("{}", date.format("%a %b %d").to_string());
+            let mut rows: Vec<ActivityRow> = Vec::new();
             activities_by_date
                 .sorted_by(|a, b| {
                     a.primary_resources[0]
@@ -356,12 +369,7 @@ async fn activity() -> anyhow::Result<String> {
                         .partial_cmp(&b.primary_resources[0].id)
                         .unwrap()
                 })
-                .group_by(|a| {
-                    format!(
-                        "{} {}",
-                        a.primary_resources[0].id, a.primary_resources[0].name
-                    )
-                })
+                .group_by(|a| a.primary_resources[0].name.to_string())
                 .into_iter()
                 .for_each(|(story_label, activities_for_story)| {
                     let highlights = activities_for_story
@@ -376,41 +384,59 @@ async fn activity() -> anyhow::Result<String> {
                         .join(", ");
 
                     rows.push(ActivityRow {
-                        date: date.format("%a %b %d").to_string(),
                         name: story_label,
                         highlights,
                     });
                 });
+
+            let mut table = Table::new(&rows);
+
+            table.with(
+                Modify::new(Columns::first())
+                    .with(Width::wrap(60).keep_words())
+                    .with(Width::increase(60)),
+            );
+
+            table.with(
+                Modify::new(Columns::last())
+                    .with(Width::wrap(30).keep_words())
+                    .with(Width::increase(30)),
+            );
+
+            table.with(Style::modern());
+            table.with(Disable::row(Rows::new(..1)));
+
+            println!("{}\n", table);
         });
 
-    let mut table = Table::new(&rows);
-
-    let (terminal_size::Width(width), terminal_size::Height(_height)) =
-        terminal_size::terminal_size().unwrap();
-
-    // table.with(Modify::new(Columns::first()).with(Width::increase(15)).with(Width::wrap(15)));
-    table.with(Modify::new(Columns::last()).with(Width::wrap(30).keep_words()));
-
-    table
-        .with(Merge::horizontal())
-        .with(Merge::vertical())
-        .with(Style::modern())
-        .with(Width::wrap(width as usize).keep_words())
-        .with(Width::increase(width as usize));
-
-    Ok(table.to_string())
+    Ok(())
 }
 
-pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
-    let branch_id = match story_id {
-        Some(id) => id.to_string(),
+#[derive(Args)]
+pub struct ViewArgs {
+    /// Optionally provide a story id, otherwise find it in the current git branch
+    story_id: Option<u64>,
+
+    /// Open the story in a web browser
+    #[arg(short, long)]
+    web: bool,
+
+    /// Print json response
+    #[arg(short, long)]
+    json: bool,
+}
+
+pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
+    let branch_id = match view_args.story_id {
+        Some(id) => id,
         None => read_branch_id()?,
     };
 
-    if web {
+    if view_args.web {
         let url = format!("https://www.pivotaltracker.com/story/show/{}", branch_id);
         webbrowser::open(&url)?;
-        return Ok(format!("opened {}", url));
+        println!("opened {}", url);
+        return Ok(());
     }
 
     let client = tracker_api_client().await?;
@@ -422,29 +448,39 @@ pub async fn view(story_id: Option<u64>, web: bool) -> anyhow::Result<String> {
         project_id, branch_id
     );
 
-    let data: api::schema::StoryDetail = client.get(url).send().await?.json().await?;
+    let response = client.get(url).send().await?;
 
-    let doc = format!("# {}\n\n{}", data.name, data.description);
-
-    print_markdown(&doc)?;
-
-    Ok("".to_string())
-}
-
-fn format_current_state(state: &StoryState) -> ColoredString {
-    match state {
-        StoryState::Planned => "---".black(),
-        StoryState::Unscheduled => "---".black(),
-        StoryState::Unstarted => "···".black(),
-        StoryState::Started => "☐☐☐".blue(),
-        StoryState::Finished => "☑☐☐".cyan(),
-        StoryState::Delivered => "☑☑☐".green(),
-        StoryState::Accepted => "☑☑☑".green(),
-        StoryState::Rejected => "☑☑☒".red(),
+    if view_args.json {
+        println!("{}", response.text().await?);
+        return Ok(());
     }
+
+    let data: api::schema::MaybeStoryDetail = response.json().await?;
+
+    match data {
+        api::schema::MaybeStoryDetail::StoryDetail(sd) => {
+            let doc = format!("# {}\n\n{}", sd.name, sd.description);
+            print_markdown(&doc)?;
+        }
+        api::schema::MaybeStoryDetail::ApiError(why) => {
+            return Err(anyhow::anyhow!(format!(
+                "tracker api error: {}\n\n{}",
+                why.code, why.error
+            )))
+        }
+    }
+
+    Ok(())
 }
 
-pub async fn mine(json: bool) -> anyhow::Result<String> {
+#[derive(Args)]
+pub struct MineArgs {
+    /// Print json response
+    #[arg(short, long)]
+    json: bool,
+}
+
+pub async fn mine(mine_args: &MineArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
     let me = tracker_me().await?;
@@ -457,8 +493,9 @@ pub async fn mine(json: bool) -> anyhow::Result<String> {
 
     let response = client.get(url).send().await?;
 
-    if json {
-        return Ok(response.text().await?);
+    if mine_args.json {
+        println!("{}", response.text().await?);
+        return Ok(());
     }
 
     let data: Vec<api::schema::Story> = response.json().await?;
@@ -507,11 +544,18 @@ pub async fn mine(json: bool) -> anyhow::Result<String> {
         })
         .collect();
 
-    let (terminal_size::Width(term_width), terminal_size::Height(_height)) =
-        terminal_size::terminal_size().unwrap();
-    let width = term_width as usize; // todo why casting?
-    let name_wrap = match width > 80 {
-        true => 44 + (width - 80),
+    let size = terminal_size::terminal_size();
+
+    let term_width: usize = match size {
+        Some(size_v) => {
+            let (terminal_size::Width(w), _) = size_v;
+            w.into()
+        }
+        None => 120,
+    };
+
+    let name_wrap: usize = match term_width > 80 {
+        true => 44 + (term_width - 80),
         false => 44,
     };
 
@@ -524,7 +568,8 @@ pub async fn mine(json: bool) -> anyhow::Result<String> {
         .with(style)
         .with(Modify::new(Rows::new(1..)).with(Width::wrap(name_wrap).keep_words()));
 
-    Ok(table.to_string())
+    println!("{}", table.to_string());
+    Ok(())
 }
 
 pub fn read_project_id() -> anyhow::Result<u64> {
@@ -573,7 +618,7 @@ pub fn read_api_token() -> anyhow::Result<String> {
     Ok(token_file_contents.trim().to_string())
 }
 
-pub fn read_branch_id() -> anyhow::Result<String> {
+pub fn read_branch_id() -> anyhow::Result<u64> {
     // possible enhancement: drag in a git crate to do this, and can likely
     // a) get this from any dir in the git repo
     // b) possibly avoid shelling out to git to create new branches
@@ -593,11 +638,13 @@ pub fn read_branch_id() -> anyhow::Result<String> {
                         {}
 
                     what we're looking for:
-                        12345-some-feature
+                        some-feature-12345
 
-                run the following to checkout a relevant branch for a story
+                run the following to create a relevant branch for a story, and set the story's
+                status to "started"
 
-                    $ stories start 12345
+                    $ stories branch 12345
+
             "#},
             branch
         ))
@@ -615,12 +662,17 @@ pub fn branch_name(head_contents: &str) -> Option<String> {
     )
 }
 
-pub fn extract_id(branch_name: &str) -> Option<String> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r"(?P<story_id>\d+)").unwrap();
-    }
-    RE.captures(branch_name)
-        .and_then(|cap| cap.name("story_id").map(|bid| bid.as_str().to_string()))
+pub fn extract_id(branch_name: &str) -> Option<u64> {
+    // lazy_static! {
+    //     static ref RE: Regex = Regex::new(r"(?P<story_id>\d+)").unwrap();
+    // }
+    // RE.captures(branch_name)
+    //     .and_then(|cap| cap.name("story_id").map(|bid| bid.as_str().to_string()))
+
+    branch_name
+        .split(|c: char| !c.is_numeric())
+        .filter_map(|s| s.parse::<u64>().ok())
+        .last()
 }
 
 #[cfg(test)]
@@ -638,8 +690,9 @@ mod tests {
 
     #[test]
     fn test_extract_id() {
-        assert_eq!(extract_id("123-yep"), Some("123".to_string()));
-        assert_eq!(extract_id("123-456-yep"), Some("123".to_string()));
+        assert_eq!(extract_id("yep-123"), Some(123));
+        assert_eq!(extract_id("yep-24-123"), Some(123));
+        assert_eq!(extract_id("123-456-yep"), Some(456));
         assert_eq!(extract_id("foobar"), None);
     }
 }
@@ -668,4 +721,17 @@ fn print_markdown(text: &str) -> anyhow::Result<()> {
             Err(anyhow!("Cannot render markdown to stdout: {:?}", error))
         }
     })
+}
+
+fn format_current_state(state: &StoryState) -> ColoredString {
+    match state {
+        StoryState::Planned => "---".black(),
+        StoryState::Unscheduled => "---".black(),
+        StoryState::Unstarted => "···".black(),
+        StoryState::Started => "☐☐☐".blue(),
+        StoryState::Finished => "☑☐☐".cyan(),
+        StoryState::Delivered => "☑☑☐".green(),
+        StoryState::Accepted => "☑☑☑".green(),
+        StoryState::Rejected => "☑☑☒".red(),
+    }
 }
