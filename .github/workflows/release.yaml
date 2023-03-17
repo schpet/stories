@@ -47,3 +47,16 @@ jobs:
           zip: windows
           # (required) GitHub token for uploading assets to GitHub Releases.
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract version
+        id: extract-version
+        run: |
+          printf "::set-output name=%s::%s\n" tag-name "${GITHUB_REF#refs/tags/}"
+      - uses: mislav/bump-homebrew-formula-action@v2
+        if: matrix.os == 'macos-latest'
+        with:
+          formula-name: stories
+          formula-path: Formula/stories.rb
+          homebrew-tap: schpet/homebrew-tap
+          download-url: https://github.com/schpet/stories/releases/download/${{ steps.extract-version.outputs.tag-name }}/stories-x86_64-apple-darwin.tar.gz
+        env:
+          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
