@@ -118,5 +118,5 @@ pub struct ApiError {
 #[serde(untagged)]
 pub enum MaybeStoryDetail {
     StoryDetail(StoryDetail),
-    ApiError(ApiError)
+    ApiError(ApiError),
 }
