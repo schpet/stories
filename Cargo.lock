@@ -2414,7 +2414,6 @@ dependencies = [
  "lazy_static",
  "mdcat",
  "pulldown-cmark",
- "regex",
  "reqwest",
  "serde",
  "serde_json",
