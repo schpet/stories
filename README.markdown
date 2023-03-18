@@ -70,7 +70,7 @@ throw `alias s=stories` in your ~/.zshrc ~/.bashrc for good measure.
 ### Releasing a new version
 
 ```console
-cargo release -x --no-publish patch
-cargo release -x --no-publish minor
-cargo release -x --no-publish major
+cargo release -x patch
+cargo release -x minor
+cargo release -x major
 ```
