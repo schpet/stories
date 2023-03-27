@@ -165,21 +165,29 @@ pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let story: api::schema::StoryDetail = client.get(&story_url).send().await?.json().await?;
 
+    let conventional_commit_type = match &story.story_type {
+        StoryType::Bug => "fix",
+        StoryType::Feature => "feat",
+        StoryType::Chore => "chore",
+        StoryType::Release => "chore",
+    };
+
     match pr_args.field {
         PrField::Body => {
             let message = format!(
                 indoc! {r#"
                     {}
 
-                    {}
-                    [delivers #{}]"#},
-                story.name, story.url, story.id,
+                    --------
+
+                    Tracker: [delivers #{}]"#},
+                story.url, story.id,
             );
             println!("{}", message);
             Ok(())
         }
         PrField::Title => {
-            println!("{}", story.name);
+            println!("{}: {}", conventional_commit_type, story.name);
             Ok(())
         }
     }
