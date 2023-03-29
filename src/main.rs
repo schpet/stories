@@ -83,6 +83,7 @@ enum Commands {
     ///
     /// $ gh pr create --title "$(stories pr title)" --body "$(stories pr body)"
     /// $ gh pr edit --body "$(stories pr body)"
+    #[clap(alias = "pr")]
     PullRequest(PrArgs),
 
     /// Stories assigned to you
