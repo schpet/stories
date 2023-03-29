@@ -77,8 +77,13 @@ enum Commands {
     #[clap(alias = "br")]
     Branch(BranchArgs),
 
-    /// Print out suggested pull request title or body
-    Pr(PrArgs),
+    /// Print out suggested pull request title or body. Aliased as `pr`
+    ///
+    /// Pairs well with the github's "gh" cli https://cli.github.com/
+    ///
+    /// $ gh pr create --title "$(stories pr title)" --body "$(stories pr body)"
+    /// $ gh pr edit --body "$(stories pr body)"
+    PullRequest(PrArgs),
 
     /// Stories assigned to you
     Mine(MineArgs),
@@ -128,7 +133,7 @@ async fn main() -> Result<()> {
         Some(Commands::Branch(branch_args)) => {
             print_result(branch(branch_args).await);
         }
-        Some(Commands::Pr(pr_args)) => {
+        Some(Commands::PullRequest(pr_args)) => {
             print_result(pull_request(pr_args).await);
         }
         Some(Commands::Activity {}) => {
