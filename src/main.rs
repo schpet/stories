@@ -21,9 +21,9 @@ use slugify::slugify;
 use mdcat::Settings;
 use pulldown_cmark::Options;
 use syntect::parsing::SyntaxSet;
-use tabled::object::{Columns, Rows};
+use tabled::object::{Rows};
 use tabled::style::{Style, VerticalLine};
-use tabled::{Disable, Modify, Table, Tabled, Width};
+use tabled::{Modify, Table, Tabled, Width};
 
 use anyhow::{anyhow, Context, Result};
 use reqwest::header;
@@ -260,7 +260,7 @@ pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
         None => data.name,
     };
 
-    let branch_name = format!("{}-{}", slugify!(&name_formatted, max_length = 30), data.id);
+    let branch_name = format!("{}-{}", slugify!(&name_formatted, max_length = 40), data.id);
 
     let git_result = Command::new("git")
         .arg("switch")
@@ -374,8 +374,7 @@ async fn activity() -> anyhow::Result<()> {
         })
         .into_iter()
         .for_each(|(date, activities_by_date)| {
-            println!("{}", date.format("%a %b %d").to_string());
-            let mut rows: Vec<ActivityRow> = Vec::new();
+            println!("{}\n----------\n", date.format("%a %b %d").to_string());
             activities_by_date
                 .sorted_by(|a, b| {
                     a.primary_resources[0]
@@ -391,36 +390,15 @@ async fn activity() -> anyhow::Result<()> {
                         .map(|a| match a.highlight.as_str() {
                             "delivered" => "delivered".green().to_string(),
                             "finished" => "finished".cyan().to_string(),
-                            "started" => "started".blue().to_string(),
                             other => other.to_string(),
                         })
                         .collect::<Vec<String>>()
                         .join(", ");
 
-                    rows.push(ActivityRow {
-                        name: story_label,
-                        highlights,
-                    });
+                    println!("{}\n  └── {}", story_label.trim(), highlights.italic());
                 });
 
-            let mut table = Table::new(&rows);
-
-            table.with(
-                Modify::new(Columns::first())
-                    .with(Width::wrap(60).keep_words())
-                    .with(Width::increase(60)),
-            );
-
-            table.with(
-                Modify::new(Columns::last())
-                    .with(Width::wrap(30).keep_words())
-                    .with(Width::increase(30)),
-            );
-
-            table.with(Style::modern());
-            table.with(Disable::row(Rows::new(..1)));
-
-            println!("{}\n", table);
+            println!();
         });
 
     Ok(())
