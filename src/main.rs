@@ -21,7 +21,7 @@ use slugify::slugify;
 use mdcat::Settings;
 use pulldown_cmark::Options;
 use syntect::parsing::SyntaxSet;
-use tabled::object::{Rows};
+use tabled::object::Rows;
 use tabled::style::{Style, VerticalLine};
 use tabled::{Modify, Table, Tabled, Width};
 
@@ -368,6 +368,14 @@ async fn activity() -> anyhow::Result<()> {
         .rev()
         .filter(|a| a.project.id == project_id)
         .filter(|a| a.kind == "story_update_activity")
+        .filter(|a| match a.highlight.as_str() {
+            "delivered" => true,
+            "started" => true,
+            "finished" => true,
+            "rejected" => true,
+            "accepted" => true,
+            _ => false,
+        })
         .group_by(|a| {
             let datetime_utc = DateTime::parse_from_rfc3339(&a.occurred_at).unwrap();
             datetime_utc.with_timezone(&Local).date_naive()
