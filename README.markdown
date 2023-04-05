@@ -29,9 +29,6 @@ stories activity
 stories --help
 ```
 
-## Notes
-
-- this assumes you use tracker's [github integration](https://www.pivotaltracker.com/help/articles/github_integration/) and deliver stories [via commit messages](https://www.pivotaltracker.com/help/articles/github_integration/#using-the-github-integration-commits)
 
 ## Installation
 
@@ -64,6 +61,42 @@ throw `alias s=stories` in your ~/.zshrc ~/.bashrc for good measure.
    ```json
    { "project_id": 1234 }
    ```
+## Github integration
+
+Ensure that your pivotal tracker project is setup with the [github integration][tgh] which connects pull requests to tracker stories, and lets you deliver stories [via commit messages][tghc].
+
+Additionally, stories' pull-request command, e.g. 
+
+```bash
+stories pr title --summarize
+```
+
+are intended to be used with github's [gh cli][gh], e.g.
+
+```
+gh pr create --title "$(stories pr title --summarize)" --body "$(stories pr body)" --web
+
+# alias this for convenience:
+gh alias set --shell prt "gh pr create --title \"\$(stories pr title --summarize)\" --body \"\$(stories pr body)\" --web"
+```
+
+you will also want to configure your repo's settings the following way:
+
+- [ ] Allow merge commits _(optionally disable this)_
+- [x] Allow squash merging
+   - Default to pull request title and description
+- [ ] Allow rebase merging  _(optionally disable this)_
+
+this can be done through the github repo settings page, or via `gh api`:
+
+```bash
+gh api repos/{owner}/{repo} --method PATCH -f allow_squash_merge=true -f allow_merge_commit=false -f allow_rebase_merge=false -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+```
+
+[tgh]: https://www.pivotaltracker.com/help/articles/github_integration/
+[tghc]: https://www.pivotaltracker.com/help/articles/github_integration/#using-the-github-integration-commits
+[gh]: https://cli.github.com/
+
 
 ## Development
 
