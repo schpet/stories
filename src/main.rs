@@ -30,7 +30,9 @@ use reqwest::header;
 use sha256::digest;
 use terminal_link::Link;
 
-pub mod api;
+use async_openai::types::{
+    ChatCompletionRequestMessageArgs, CreateChatCompletionRequestArgs, Role,
+};
 
 use indoc::indoc;
 use std::{
@@ -39,6 +41,8 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+
+pub mod api;
 
 #[derive(Tabled, Debug)]
 struct StoryRow {
@@ -154,6 +158,10 @@ pub struct PrArgs {
 
     /// Optionally provide a story id, otherwise find it in the current git branch
     story_id: Option<u64>,
+
+    #[arg(short, long)]
+    /// Automatically summarize the field with chatgpt
+    summarize: bool,
 }
 
 pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
@@ -193,10 +201,75 @@ pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
             Ok(())
         }
         PrField::Title => {
-            println!("{}: {}", conventional_commit_type, story.name);
+            if pr_args.summarize {
+                let client = open_ai_client()?;
+                let action = match &story.story_type {
+                    StoryType::Bug => "fixes",
+                    StoryType::Feature => "implements",
+                    _ => "addresses",
+                };
+
+                let prompt = format!(
+                    "Write a git commit subject for a change that {} this:",
+                    action
+                );
+                let full_prompt = format!("{}\n{}\n\n{}", prompt, story.name, story.description);
+
+                let request = CreateChatCompletionRequestArgs::default()
+                    .model("gpt-3.5-turbo")
+                    .messages([
+                        ChatCompletionRequestMessageArgs::default()
+                            .role(Role::Assistant)
+                            .content( "You summarize tasks into git commit messages. You follow the git conventional commit specification by prefixing features and bugs with feat: and bug: respectively, and omit the optional scope.")
+                            .build()?,
+                        ChatCompletionRequestMessageArgs::default()
+                            .role(Role::User)
+                            .content(full_prompt)
+                            .build()?,
+                    ])
+                    .max_tokens(40_u16)
+                    .build()?;
+
+                let response = client.chat().create(request).await?;
+
+                let first_choice = response
+                    .choices
+                    .first()
+                    .ok_or_else(|| anyhow!("didn't get a choice back from openai"))?;
+
+                println!("{}", first_choice.message.content);
+            } else {
+                println!("{}: {}", conventional_commit_type, story.name);
+            }
             Ok(())
         }
     }
+}
+
+fn open_ai_client() -> anyhow::Result<async_openai::Client> {
+    let api_key = read_open_ai_secret_key()?;
+    Ok(async_openai::Client::new().with_api_key(api_key))
+}
+
+fn read_open_ai_secret_key() -> anyhow::Result<String> {
+    let path = Path::new(&config_dir()?).join("open_ai_secret_key.txt");
+
+    let path_string = path.as_os_str().to_str().unwrap();
+
+    let token_file_contents = fs::read_to_string(&path).context(format!(
+        indoc! {"
+            didn't find the credentials config file at {}
+
+            1. visit https://platform.openai.com/account/api-keys
+            2. create a new secret
+            3. run something like this to dump it in
+
+                $ echo $YOUR_API_TOKEN > {}
+        "},
+        path_string, path_string
+    ))?;
+
+    Ok(token_file_contents.trim().to_string())
 }
 
 pub async fn whoami() -> anyhow::Result<()> {

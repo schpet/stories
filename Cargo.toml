@@ -12,6 +12,7 @@ pre-release-hook = ["git-cliff", "-o", "CHANGELOG.markdown", "--tag", "{{version
 
 [dependencies]
 anyhow = "1.0.69"
+async-openai = "0.10.2"
 cacache = "11.0.0"
 chrono = "0.4.23"
 clap = { version = "4.1.4", features = ["derive"] }
