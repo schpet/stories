@@ -441,13 +441,11 @@ async fn activity() -> anyhow::Result<()> {
         .rev()
         .filter(|a| a.project.id == project_id)
         .filter(|a| a.kind == "story_update_activity")
-        .filter(|a| match a.highlight.as_str() {
-            "delivered" => true,
-            "started" => true,
-            "finished" => true,
-            "rejected" => true,
-            "accepted" => true,
-            _ => false,
+        .filter(|a| {
+            matches!(
+                a.highlight.as_str(),
+                "delivered" | "started" | "finished" | "rejected" | "accepted"
+            )
         })
         .group_by(|a| {
             let datetime_utc = DateTime::parse_from_rfc3339(&a.occurred_at).unwrap();
@@ -455,7 +453,7 @@ async fn activity() -> anyhow::Result<()> {
         })
         .into_iter()
         .for_each(|(date, activities_by_date)| {
-            println!("{}\n----------\n", date.format("%a %b %d").to_string());
+            println!("{}\n----------\n", date.format("%a %b %d"));
             activities_by_date
                 .sorted_by(|a, b| {
                     a.primary_resources[0]
@@ -641,7 +639,7 @@ pub async fn mine(mine_args: &MineArgs) -> anyhow::Result<()> {
         .with(style)
         .with(Modify::new(Rows::new(1..)).with(Width::wrap(name_wrap).keep_words()));
 
-    println!("{}", table.to_string());
+    println!("{}", table);
     Ok(())
 }
 
