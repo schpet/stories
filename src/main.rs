@@ -455,7 +455,7 @@ async fn activity() -> anyhow::Result<()> {
         })
         .into_iter()
         .for_each(|(date, activities_by_date)| {
-            println!("{}\n----------\n", date.format("%a %b %d").to_string());
+            println!("{}\n----------\n", date.format("%a %b %d"));
             activities_by_date
                 .sorted_by(|a, b| {
                     a.primary_resources[0]
@@ -641,7 +641,7 @@ pub async fn mine(mine_args: &MineArgs) -> anyhow::Result<()> {
         .with(style)
         .with(Modify::new(Rows::new(1..)).with(Width::wrap(name_wrap).keep_words()));
 
-    println!("{}", table.to_string());
+    println!("{}", table);
     Ok(())
 }
 
