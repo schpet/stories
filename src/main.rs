@@ -441,13 +441,11 @@ async fn activity() -> anyhow::Result<()> {
         .rev()
         .filter(|a| a.project.id == project_id)
         .filter(|a| a.kind == "story_update_activity")
-        .filter(|a| match a.highlight.as_str() {
-            "delivered" => true,
-            "started" => true,
-            "finished" => true,
-            "rejected" => true,
-            "accepted" => true,
-            _ => false,
+        .filter(|a| {
+            matches!(
+                a.highlight.as_str(),
+                "delivered" | "started" | "finished" | "rejected" | "accepted"
+            )
         })
         .group_by(|a| {
             let datetime_utc = DateTime::parse_from_rfc3339(&a.occurred_at).unwrap();
