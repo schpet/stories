@@ -531,8 +531,9 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
     match data {
         api::schema::MaybeStoryDetail::StoryDetail(sd) => {
             let view_on_web = format!("View this story on Tracker: {}", sd.url);
-            let doc = format!("# {}\n\n{}\n\n\n{}", sd.name, sd.description, view_on_web.truecolor(200, 200, 200));
+            let doc = format!("# {}\n\n{}", sd.name, sd.description);
             print_markdown(&doc)?;
+            println!("\n\n{}", view_on_web.truecolor(200, 200, 200))
         }
         api::schema::MaybeStoryDetail::ApiError(why) => {
             return Err(anyhow::anyhow!(format!(
