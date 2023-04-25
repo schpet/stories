@@ -531,9 +531,15 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
     match data {
         api::schema::MaybeStoryDetail::StoryDetail(sd) => {
             let view_on_web = format!("View this story on Tracker: {}", sd.url);
-            let doc = format!("# {}\n\n{}", sd.name, sd.description);
+            println!(
+                "{}\n{} · {}\n",
+                sd.name.black().bold(),
+                format_story_type(&sd.story_type),
+                format_current_state(&sd.current_state),
+            );
+            let doc = format!("---\n{}\n---", &sd.description);
             print_markdown(&doc)?;
-            println!("\n\n{}", view_on_web.truecolor(200, 200, 200))
+            println!("\n{}", view_on_web.truecolor(200, 200, 200))
         }
         api::schema::MaybeStoryDetail::ApiError(why) => {
             return Err(anyhow::anyhow!(format!(
@@ -610,7 +616,7 @@ pub async fn mine(mine_args: &MineArgs) -> anyhow::Result<()> {
             StoryRow {
                 id: entry.id.to_string(),
                 story_type,
-                current_state: format_current_state(&entry.current_state),
+                current_state: current_state_icon(&entry.current_state),
                 name,
                 actions: link,
             }
@@ -776,8 +782,14 @@ fn print_markdown(text: &str) -> anyhow::Result<()> {
         Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH,
     );
 
+    let terminal = if atty::is(atty::Stream::Stdout) {
+        TerminalProgram::detect()
+    } else {
+        TerminalProgram::Dumb
+    };
+
     let settings: Settings = mdcat::Settings {
-        terminal_capabilities: TerminalProgram::Ansi.capabilities(),
+        terminal_capabilities: terminal.capabilities(),
         terminal_size: mdcat::terminal::TerminalSize::default(),
         resource_access: mdcat::ResourceAccess::LocalOnly,
         syntax_set: SyntaxSet::load_defaults_newlines(),
@@ -796,7 +808,7 @@ fn print_markdown(text: &str) -> anyhow::Result<()> {
     })
 }
 
-fn format_current_state(state: &StoryState) -> ColoredString {
+fn current_state_icon(state: &StoryState) -> ColoredString {
     match state {
         StoryState::Planned => "---".black(),
         StoryState::Unscheduled => "---".black(),
@@ -806,5 +818,27 @@ fn format_current_state(state: &StoryState) -> ColoredString {
         StoryState::Delivered => "☑☑☐".green(),
         StoryState::Accepted => "☑☑☑".green(),
         StoryState::Rejected => "☑☑☒".red(),
+    }
+}
+
+fn format_current_state(state: &StoryState) -> ColoredString {
+    match state {
+        StoryState::Planned => "Planned".black(),
+        StoryState::Unscheduled => "Unscheduled".black(),
+        StoryState::Unstarted => "Unstarted".black(),
+        StoryState::Started => "Started".blue(),
+        StoryState::Finished => "Finished".cyan(),
+        StoryState::Delivered => "Delivered".green(),
+        StoryState::Accepted => "Accepted".green(),
+        StoryState::Rejected => "Rejected".red(),
+    }
+}
+
+fn format_story_type(story_type: &StoryType) -> ColoredString {
+    match story_type {
+        StoryType::Bug => "Bug".red(),
+        StoryType::Feature => "Feature".green(),
+        StoryType::Chore => "Chore".black(),
+        StoryType::Release => "Release".black(),
     }
 }
