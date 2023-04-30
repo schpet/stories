@@ -10,5 +10,8 @@ build:
 test:
     cargo test
 
+fmt:
+    cargo fmt
+
 release LEVEL:
     cargo release -x {{ LEVEL }}

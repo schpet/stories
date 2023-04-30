@@ -546,9 +546,7 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
             let links = extract_links(&sd.description);
 
             if !links.is_empty() {
-                let link_string = links.iter().map(|link| {
-                    format!("- {}", link)
-                }).join("\n");
+                let link_string = links.iter().map(|link| format!("- {}", link)).join("\n");
                 let link_doc = format!("## Links\n{}", link_string);
                 println!();
                 print_markdown(&link_doc, None)?;
