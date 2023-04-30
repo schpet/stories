@@ -11,14 +11,14 @@ use chrono::{DateTime, Local};
 use clap::{Args, Parser, Subcommand};
 use colored::*;
 use itertools::Itertools;
-use mdcat::push_tty;
-use mdcat::terminal::TerminalProgram;
+use lazy_static::lazy_static;
+use pulldown_cmark_mdcat::resources::NoopResourceHandler;
+use pulldown_cmark_mdcat::{push_tty, Environment, Settings, TerminalProgram, TerminalSize, Theme};
 use reqwest::header::USER_AGENT;
 use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 use slugify::slugify;
 
-use mdcat::Settings;
 use pulldown_cmark::Options;
 use syntect::parsing::SyntaxSet;
 use tabled::object::Rows;
@@ -537,9 +537,12 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
                 format_story_type(&sd.story_type),
                 format_current_state(&sd.current_state),
             );
-            let doc = format!("---\n{}\n---", &sd.description);
-            print_markdown(&doc)?;
-            println!("\n{}", view_on_web.truecolor(200, 200, 200))
+            let line =
+                "────────────────────────────────────────────────────────────────────────────────";
+            println!("{}", line.truecolor(100, 100, 100));
+            print_markdown(&sd.description)?;
+            println!("{}\n", line.truecolor(100, 100, 100));
+            println!("{}", view_on_web.truecolor(200, 200, 200))
         }
         api::schema::MaybeStoryDetail::ApiError(why) => {
             return Err(anyhow::anyhow!(format!(
@@ -788,18 +791,26 @@ fn print_markdown(text: &str) -> anyhow::Result<()> {
         TerminalProgram::Dumb
     };
 
-    let settings: Settings = mdcat::Settings {
+    // let size = TerminalSize::detect().unwrap_or_default();
+    // size = size.with_max_columns(80);
+    let terminal_size = TerminalSize::detect().unwrap_or_default().with_max_columns(80);
+
+    lazy_static! {
+        static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
+    }
+
+    let settings = Settings {
         terminal_capabilities: terminal.capabilities(),
-        terminal_size: mdcat::terminal::TerminalSize::default(),
-        resource_access: mdcat::ResourceAccess::LocalOnly,
-        syntax_set: SyntaxSet::load_defaults_newlines(),
+        terminal_size: terminal_size,
+        syntax_set: &SYNTAX_SET,
+        theme: Theme::default(),
     };
-    let env = mdcat::Environment::for_local_directory(&std::env::current_dir().unwrap()).unwrap();
+    let env = Environment::for_local_directory(&std::env::current_dir().unwrap()).unwrap();
 
     let stdout = std::io::stdout();
     let mut output = stdout.lock();
 
-    push_tty(&settings, &env, &mut output, parser).or_else(|error| {
+    push_tty(&settings, &env, &NoopResourceHandler, &mut output, parser).or_else(|error| {
         if error.kind() == std::io::ErrorKind::BrokenPipe {
             Ok(())
         } else {
