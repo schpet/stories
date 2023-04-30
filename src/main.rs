@@ -14,6 +14,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use pulldown_cmark_mdcat::resources::NoopResourceHandler;
 use pulldown_cmark_mdcat::{push_tty, Environment, Settings, TerminalProgram, TerminalSize, Theme};
+use regex::Regex;
 use reqwest::header::USER_AGENT;
 use serde::Deserialize;
 use serde_json::{Map, Number, Value};
@@ -540,8 +541,20 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
             let line =
                 "────────────────────────────────────────────────────────────────────────────────";
             println!("{}", line.truecolor(100, 100, 100));
-            print_markdown(&sd.description)?;
-            println!("{}\n", line.truecolor(100, 100, 100));
+            print_markdown(&sd.description, Some(80))?;
+
+            let links = extract_links(&sd.description);
+
+            if !links.is_empty() {
+                let link_string = links.iter().map(|link| {
+                    format!("- {}", link)
+                }).join("\n");
+                let link_doc = format!("## Links\n{}", link_string);
+                println!();
+                print_markdown(&link_doc, None)?;
+            }
+
+            println!("\n{}\n", line.truecolor(100, 100, 100));
             println!("{}", view_on_web.truecolor(200, 200, 200))
         }
         api::schema::MaybeStoryDetail::ApiError(why) => {
@@ -779,7 +792,7 @@ mod tests {
     }
 }
 
-fn print_markdown(text: &str) -> anyhow::Result<()> {
+fn print_markdown(text: &str, columns: Option<u16>) -> anyhow::Result<()> {
     let parser = pulldown_cmark::Parser::new_ext(
         text,
         Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH,
@@ -791,9 +804,12 @@ fn print_markdown(text: &str) -> anyhow::Result<()> {
         TerminalProgram::Dumb
     };
 
-    // let size = TerminalSize::detect().unwrap_or_default();
-    // size = size.with_max_columns(80);
-    let terminal_size = TerminalSize::detect().unwrap_or_default().with_max_columns(80);
+    let terminal_size = TerminalSize::detect().unwrap_or_default();
+    let terminal_size = if let Some(max_columns) = columns {
+        terminal_size.with_max_columns(max_columns)
+    } else {
+        terminal_size
+    };
 
     lazy_static! {
         static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
@@ -852,4 +868,15 @@ fn format_story_type(story_type: &StoryType) -> ColoredString {
         StoryType::Chore => "Chore".black(),
         StoryType::Release => "Release".black(),
     }
+}
+
+fn extract_links(text: &str) -> Vec<String> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"(?P<url>https?://[^\s]+)").unwrap();
+    }
+
+    RE.captures_iter(text)
+        .map(|cap| cap.name("url").map(|url| url.as_str().to_string()))
+        .flatten()
+        .collect()
 }
