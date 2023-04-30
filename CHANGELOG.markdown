@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2023-04-30
+
+### Features
+
+- Add tracker links to stories view (#15)
+- Include story type and current state in stories view (#16)
+
+### Miscellaneous Tasks
+
+- Improve documentation around github integration
+- Fix clippy warnings and add justfile (#13)
+
 ## [0.3.0] - 2023-04-05
 
 ### Bug Fixes
@@ -19,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - Remove unused regex crate
 - Update release instructions
 - Improve help documentation on pr command
+- Release stories version 0.3.0
 
 ## [0.2.7] - 2023-03-18
 
