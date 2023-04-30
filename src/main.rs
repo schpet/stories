@@ -11,14 +11,15 @@ use chrono::{DateTime, Local};
 use clap::{Args, Parser, Subcommand};
 use colored::*;
 use itertools::Itertools;
-use mdcat::push_tty;
-use mdcat::terminal::TerminalProgram;
+use lazy_static::lazy_static;
+use pulldown_cmark_mdcat::resources::NoopResourceHandler;
+use pulldown_cmark_mdcat::{push_tty, Environment, Settings, TerminalProgram, TerminalSize, Theme};
+use regex::Regex;
 use reqwest::header::USER_AGENT;
 use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 use slugify::slugify;
 
-use mdcat::Settings;
 use pulldown_cmark::Options;
 use syntect::parsing::SyntaxSet;
 use tabled::object::Rows;
@@ -531,9 +532,28 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
     match data {
         api::schema::MaybeStoryDetail::StoryDetail(sd) => {
             let view_on_web = format!("View this story on Tracker: {}", sd.url);
-            let doc = format!("# {}\n\n{}", sd.name, sd.description);
-            print_markdown(&doc)?;
-            println!("\n\n{}", view_on_web.truecolor(200, 200, 200))
+            println!(
+                "{}\n{} · {}\n",
+                sd.name.black().bold(),
+                format_story_type(&sd.story_type),
+                format_current_state(&sd.current_state),
+            );
+            let line =
+                "────────────────────────────────────────────────────────────────────────────────";
+            println!("{}", line.truecolor(100, 100, 100));
+            print_markdown(&sd.description, Some(80))?;
+
+            let links = extract_links(&sd.description);
+
+            if !links.is_empty() {
+                let link_string = links.iter().map(|link| format!("- {}", link)).join("\n");
+                let link_doc = format!("## Links\n{}", link_string);
+                println!();
+                print_markdown(&link_doc, None)?;
+            }
+
+            println!("\n{}\n", line.truecolor(100, 100, 100));
+            println!("{}", view_on_web.truecolor(200, 200, 200))
         }
         api::schema::MaybeStoryDetail::ApiError(why) => {
             return Err(anyhow::anyhow!(format!(
@@ -610,7 +630,7 @@ pub async fn mine(mine_args: &MineArgs) -> anyhow::Result<()> {
             StoryRow {
                 id: entry.id.to_string(),
                 story_type,
-                current_state: format_current_state(&entry.current_state),
+                current_state: current_state_icon(&entry.current_state),
                 name,
                 actions: link,
             }
@@ -770,24 +790,41 @@ mod tests {
     }
 }
 
-fn print_markdown(text: &str) -> anyhow::Result<()> {
+fn print_markdown(text: &str, columns: Option<u16>) -> anyhow::Result<()> {
     let parser = pulldown_cmark::Parser::new_ext(
         text,
         Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH,
     );
 
-    let settings: Settings = mdcat::Settings {
-        terminal_capabilities: TerminalProgram::Ansi.capabilities(),
-        terminal_size: mdcat::terminal::TerminalSize::default(),
-        resource_access: mdcat::ResourceAccess::LocalOnly,
-        syntax_set: SyntaxSet::load_defaults_newlines(),
+    let terminal = if atty::is(atty::Stream::Stdout) {
+        TerminalProgram::detect()
+    } else {
+        TerminalProgram::Dumb
     };
-    let env = mdcat::Environment::for_local_directory(&std::env::current_dir().unwrap()).unwrap();
+
+    let terminal_size = TerminalSize::detect().unwrap_or_default();
+    let terminal_size = if let Some(max_columns) = columns {
+        terminal_size.with_max_columns(max_columns)
+    } else {
+        terminal_size
+    };
+
+    lazy_static! {
+        static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
+    }
+
+    let settings = Settings {
+        terminal_capabilities: terminal.capabilities(),
+        terminal_size: terminal_size,
+        syntax_set: &SYNTAX_SET,
+        theme: Theme::default(),
+    };
+    let env = Environment::for_local_directory(&std::env::current_dir().unwrap()).unwrap();
 
     let stdout = std::io::stdout();
     let mut output = stdout.lock();
 
-    push_tty(&settings, &env, &mut output, parser).or_else(|error| {
+    push_tty(&settings, &env, &NoopResourceHandler, &mut output, parser).or_else(|error| {
         if error.kind() == std::io::ErrorKind::BrokenPipe {
             Ok(())
         } else {
@@ -796,7 +833,7 @@ fn print_markdown(text: &str) -> anyhow::Result<()> {
     })
 }
 
-fn format_current_state(state: &StoryState) -> ColoredString {
+fn current_state_icon(state: &StoryState) -> ColoredString {
     match state {
         StoryState::Planned => "---".black(),
         StoryState::Unscheduled => "---".black(),
@@ -807,4 +844,37 @@ fn format_current_state(state: &StoryState) -> ColoredString {
         StoryState::Accepted => "☑☑☑".green(),
         StoryState::Rejected => "☑☑☒".red(),
     }
+}
+
+fn format_current_state(state: &StoryState) -> ColoredString {
+    match state {
+        StoryState::Planned => "Planned".black(),
+        StoryState::Unscheduled => "Unscheduled".black(),
+        StoryState::Unstarted => "Unstarted".black(),
+        StoryState::Started => "Started".blue(),
+        StoryState::Finished => "Finished".cyan(),
+        StoryState::Delivered => "Delivered".green(),
+        StoryState::Accepted => "Accepted".green(),
+        StoryState::Rejected => "Rejected".red(),
+    }
+}
+
+fn format_story_type(story_type: &StoryType) -> ColoredString {
+    match story_type {
+        StoryType::Bug => "Bug".red(),
+        StoryType::Feature => "Feature".green(),
+        StoryType::Chore => "Chore".black(),
+        StoryType::Release => "Release".black(),
+    }
+}
+
+fn extract_links(text: &str) -> Vec<String> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"(?P<url>https?://[^\s]+)").unwrap();
+    }
+
+    RE.captures_iter(text)
+        .map(|cap| cap.name("url").map(|url| url.as_str().to_string()))
+        .flatten()
+        .collect()
 }
