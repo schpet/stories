@@ -78,6 +78,9 @@ enum Commands {
     #[clap(alias = "show")]
     View(ViewArgs),
 
+    /// Displays the project
+    Project(ProjectArgs),
+
     /// Checks out a git branch and changes the story's state to started
     #[clap(alias = "br")]
     Branch(BranchArgs),
@@ -127,20 +130,23 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::View(view_args)) => {
-            print_result(view(view_args).await);
+        Some(Commands::View(args)) => {
+            print_result(view(args).await);
         }
-        Some(Commands::Mine(mine_args)) => {
-            print_result(mine(mine_args).await);
+        Some(Commands::Project(args)) => {
+            print_result(project(args).await);
+        }
+        Some(Commands::Mine(args)) => {
+            print_result(mine(args).await);
         }
         Some(Commands::Whoami {}) => {
             print_result(whoami().await);
         }
-        Some(Commands::Branch(branch_args)) => {
-            print_result(branch(branch_args).await);
+        Some(Commands::Branch(args)) => {
+            print_result(branch(args).await);
         }
-        Some(Commands::PullRequest(pr_args)) => {
-            print_result(pull_request(pr_args).await);
+        Some(Commands::PullRequest(args)) => {
+            print_result(pull_request(args).await);
         }
         Some(Commands::Activity(activity_args)) => {
             print_result(activity(activity_args).await);
@@ -607,6 +613,46 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[derive(Args)]
+pub struct ProjectArgs {
+    /// Open the story in a web browser
+    #[arg(short, long)]
+    web: bool,
+
+    /// Print json response
+    #[arg(short, long)]
+    json: bool,
+}
+
+pub async fn project(project_args: &ProjectArgs) -> anyhow::Result<()> {
+    let project_id = read_project_id()?;
+
+    if project_args.web {
+        let web_url = format!("https://www.pivotaltracker.com/n/projects/{}", project_id);
+
+        webbrowser::open(&web_url)?;
+
+        println!("opened {}", web_url);
+        return Ok(());
+    }
+
+    let client = tracker_api_client().await?;
+
+    let url = format!(
+        "https://www.pivotaltracker.com/services/v5/projects/{}",
+        project_id
+    );
+
+    let response = client.get(url).send().await?;
+
+    if project_args.json {
+        println!("{}", response.text().await?);
+        return Ok(());
+    }
+
+    todo!("only --web and --json available");
 }
 
 #[derive(Args)]
