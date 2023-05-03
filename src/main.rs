@@ -158,7 +158,7 @@ pub struct PrArgs {
     field: PrField,
 
     /// Optionally provide a story id, otherwise find it in the current git branch
-    story_id: Option<u64>,
+    story_id: Option<String>,
 
     #[arg(short, long)]
     /// Automatically summarize the field with chatgpt
@@ -166,8 +166,8 @@ pub struct PrArgs {
 }
 
 pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
-    let story_id = match pr_args.story_id {
-        Some(id) => id,
+    let story_id = match &pr_args.story_id {
+        Some(id) => parse_story_id(id)?,
         None => read_branch_id()?,
     };
 
@@ -487,7 +487,7 @@ async fn activity() -> anyhow::Result<()> {
 #[derive(Args)]
 pub struct ViewArgs {
     /// Optionally provide a story id, otherwise find it in the current git branch
-    story_id: Option<u64>,
+    story_id: Option<String>,
 
     /// Open the story in a web browser
     #[arg(short, long)]
@@ -499,8 +499,8 @@ pub struct ViewArgs {
 }
 
 pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
-    let branch_id = match view_args.story_id {
-        Some(id) => id,
+    let branch_id = match &view_args.story_id {
+        Some(id) => parse_story_id(id)?,
         None => read_branch_id()?,
     };
 
@@ -877,4 +877,28 @@ fn extract_links(text: &str) -> Vec<String> {
         .map(|cap| cap.name("url").map(|url| url.as_str().to_string()))
         .flatten()
         .collect()
+}
+
+// parses a u64 integer from a string like "123" or "#123" or "https://www.pivotaltracker.com/story/show/185062454"
+fn parse_story_id(s: &str) -> Result<u64> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"(?P<id>\d+)").unwrap();
+    }
+
+    RE.captures(s)
+        .and_then(|cap| {
+            cap.name("id")
+                .map(|bid| bid.as_str().parse::<u64>().unwrap())
+        })
+        .ok_or_else(|| anyhow!("Could not parse story id from {}", s))
+}
+
+#[cfg(test)]
+mod parse_story_id_tests {
+    use super::parse_story_id;
+
+    #[test]
+    fn test_string_id() {
+        assert_eq!(parse_story_id("123").unwrap(), 123);
+    }
 }
