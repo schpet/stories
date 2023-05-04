@@ -54,7 +54,7 @@ pub struct StoryDetail {
     #[serde(default)]
     pub estimate: Option<u32>,
     pub labels: Vec<Label>,
-    pub description: String,
+    pub description: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -102,6 +102,10 @@ pub struct Me {
 ///   "kind": "error",
 ///   "error": "The object you tried to access could not be found.  It may have been removed by another user, you may be using the ID of another object type, or you may be trying to access a sub-resource at the wrong point in a tree."
 /// }
+///
+/// or
+///
+// {"code":"invalid_parameter","kind":"error","error":"One or more request parameters was missing or invalid.","general_problem":"Stories in the started state must be estimated.","validation_errors":[{"field":"estimate","problem":"Stories in the started state must be estimated."}]}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiError {
     #[serde(rename = "code")]
@@ -112,6 +116,12 @@ pub struct ApiError {
 
     #[serde(rename = "error")]
     pub error: String,
+
+    #[serde(rename = "general_problem")]
+    pub general_problem: Option<String>,
+
+    #[serde(rename = "validation_errors")]
+    pub validation_errors: Option<Vec<ValidationError>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -119,4 +129,13 @@ pub struct ApiError {
 pub enum MaybeStoryDetail {
     StoryDetail(StoryDetail),
     ApiError(ApiError),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ValidationError {
+    #[serde(rename = "field")]
+    pub field: String,
+
+    #[serde(rename = "problem")]
+    pub problem: String,
 }
