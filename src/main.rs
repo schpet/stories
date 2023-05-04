@@ -766,7 +766,6 @@ fn parse_story_input_id(s: &str) -> Result<u64> {
     extract_branch_id(s).ok_or_else(|| anyhow!("Could not parse story id from {}", s))
 }
 
-
 fn print_markdown(text: &str, columns: Option<u16>) -> anyhow::Result<()> {
     let parser = pulldown_cmark::Parser::new_ext(
         text,
@@ -881,7 +880,14 @@ mod tests {
     fn test_string_id() {
         assert_eq!(parse_story_input_id("123").unwrap(), 123);
         assert_eq!(parse_story_input_id("#123").unwrap(), 123);
-        assert_eq!(parse_story_input_id("https://www.pivotaltracker.com/story/show/333").unwrap(), 333);
-        assert_eq!(parse_story_input_id("https://www.pivotaltracker.com/n/projects/123/stories/456").unwrap(), 456);
+        assert_eq!(
+            parse_story_input_id("https://www.pivotaltracker.com/story/show/333").unwrap(),
+            333
+        );
+        assert_eq!(
+            parse_story_input_id("https://www.pivotaltracker.com/n/projects/123/stories/456")
+                .unwrap(),
+            456
+        );
     }
 }
