@@ -167,7 +167,7 @@ pub struct PrArgs {
 
 pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
     let story_id = match &pr_args.story_id {
-        Some(id) => parse_story_input_id(id)?,
+        Some(id) => parse_story_id(id)?,
         None => read_branch_id()?,
     };
 
@@ -214,7 +214,14 @@ pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
                     "Write a git commit subject for a change that {} this:",
                     action
                 );
-                let full_prompt = format!("{}\n{}\n\n{}", prompt, story.name, story.description);
+                let full_prompt = format!(
+                    "{}\n{}\n\n{}",
+                    prompt,
+                    story.name,
+                    story
+                        .description
+                        .unwrap_or("(description missing)".to_string())
+                );
 
                 let request = CreateChatCompletionRequestArgs::default()
                     .model("gpt-3.5-turbo")
@@ -336,29 +343,6 @@ pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
 
     let branch_name = format!("{}-{}", slugify!(&name_formatted, max_length = 40), data.id);
 
-    let git_result = Command::new("git")
-        .arg("switch")
-        .arg("-c")
-        .arg(&branch_name)
-        .output();
-
-    let git_message = match git_result {
-        Ok(result) => {
-            if result.status.success() {
-                format!("checked out branch successfully: {}", branch_name)
-            } else {
-                format!(
-                    "🔥 creating git branch failed, does it already exist? try\n\n\tgit switch {}",
-                    branch_name
-                )
-            }
-        }
-        Err(err) => {
-            // this right?
-            return Err(err.into());
-        }
-    };
-
     let mut map = Map::new();
     map.insert(
         "current_state".to_string(),
@@ -378,14 +362,39 @@ pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
     let response_text = response.text().await?;
 
     if !status.is_success() {
-        return Err(anyhow!(format!("{}\n\n{}", status, response_text)));
+        let error_data = serde_json::from_str::<api::schema::ApiError>(&response_text)?;
+        match &error_data.general_problem {
+            Some(problem) => {
+                return Err(anyhow!(format!("{}\n\n{}", status, problem)));
+            }
+            None => return Err(anyhow!(format!("{}\n\n{}", status, response_text))),
+        };
     };
 
     let data = serde_json::from_str::<api::schema::StoryDetail>(&response_text)?;
 
-    // TODO: if a feature is not pointed, there will be a serialization error here
+    let git_result = Command::new("git")
+        .arg("switch")
+        .arg("-c")
+        .arg(&branch_name)
+        .output();
 
-    println!("{}\nupdated story {}", git_message, data.id);
+    let git_message = match git_result {
+        Ok(result) => {
+            if result.status.success() {
+                format!("checked out {}", branch_name.bold())
+            } else {
+                format!("failed 🔥 retry with `git switch {}`", branch_name)
+            }
+        }
+        Err(err) => {
+            // this right?
+            return Err(err.into());
+        }
+    };
+
+    println!("Updated story: #{} {}", data.id, data.name.italic());
+    println!("Git branch: {}\n", git_message,);
 
     Ok(())
 }
@@ -500,7 +509,7 @@ pub struct ViewArgs {
 
 pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
     let branch_id = match &view_args.story_id {
-        Some(id) => parse_story_input_id(id)?,
+        Some(id) => parse_story_id(id)?,
         None => read_branch_id()?,
     };
 
@@ -540,10 +549,15 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
             );
             let line =
                 "────────────────────────────────────────────────────────────────────────────────";
-            println!("{}", line.truecolor(100, 100, 100));
-            print_markdown(&sd.description, Some(80))?;
 
-            let links = extract_links(&sd.description);
+            let description = &sd
+                .description
+                .unwrap_or("(description missing)".to_string());
+
+            println!("{}", line.truecolor(100, 100, 100));
+            print_markdown(&description, Some(80))?;
+
+            let links = extract_links(&description);
 
             if !links.is_empty() {
                 let link_string = links.iter().map(|link| format!("- {}", link)).join("\n");
@@ -722,7 +736,7 @@ pub fn read_branch_id() -> anyhow::Result<u64> {
     let branch =
         branch_name(&head_contents).ok_or_else(|| anyhow!("no branch name found in .git/head"))?;
 
-    let id = extract_branch_id(&branch).ok_or_else(|| {
+    let id = extract_id(&branch).ok_or_else(|| {
         anyhow!(format!(
             indoc! {r#"
                 the current git branch doesn't appear to have an id in it.
@@ -755,15 +769,15 @@ fn branch_name(head_contents: &str) -> Option<String> {
     )
 }
 
-fn extract_branch_id(branch_name: &str) -> Option<u64> {
+fn extract_id(branch_name: &str) -> Option<u64> {
     branch_name
         .split(|c: char| !c.is_numeric())
         .filter_map(|s| s.parse::<u64>().ok())
         .last()
 }
 
-fn parse_story_input_id(s: &str) -> Result<u64> {
-    extract_branch_id(s).ok_or_else(|| anyhow!("Could not parse story id from {}", s))
+fn parse_story_id(s: &str) -> Result<u64> {
+    extract_id(s).ok_or_else(|| anyhow!("Could not parse story id from {}", s))
 }
 
 fn print_markdown(text: &str, columns: Option<u16>) -> anyhow::Result<()> {
@@ -870,23 +884,22 @@ mod tests {
 
     #[test]
     fn test_extract_id() {
-        assert_eq!(extract_branch_id("yep-123"), Some(123));
-        assert_eq!(extract_branch_id("yep-24-123"), Some(123));
-        assert_eq!(extract_branch_id("123-456-yep"), Some(456));
-        assert_eq!(extract_branch_id("foobar"), None);
+        assert_eq!(extract_id("yep-123"), Some(123));
+        assert_eq!(extract_id("yep-24-123"), Some(123));
+        assert_eq!(extract_id("123-456-yep"), Some(456));
+        assert_eq!(extract_id("foobar"), None);
     }
 
     #[test]
     fn test_string_id() {
-        assert_eq!(parse_story_input_id("123").unwrap(), 123);
-        assert_eq!(parse_story_input_id("#123").unwrap(), 123);
+        assert_eq!(parse_story_id("123").unwrap(), 123);
+        assert_eq!(parse_story_id("#123").unwrap(), 123);
         assert_eq!(
-            parse_story_input_id("https://www.pivotaltracker.com/story/show/333").unwrap(),
+            parse_story_id("https://www.pivotaltracker.com/story/show/333").unwrap(),
             333
         );
         assert_eq!(
-            parse_story_input_id("https://www.pivotaltracker.com/n/projects/123/stories/456")
-                .unwrap(),
+            parse_story_id("https://www.pivotaltracker.com/n/projects/123/stories/456").unwrap(),
             456
         );
     }
