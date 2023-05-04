@@ -167,7 +167,7 @@ pub struct PrArgs {
 
 pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
     let story_id = match &pr_args.story_id {
-        Some(id) => parse_story_id(id)?,
+        Some(id) => parse_story_input_id(id)?,
         None => read_branch_id()?,
     };
 
@@ -500,7 +500,7 @@ pub struct ViewArgs {
 
 pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
     let branch_id = match &view_args.story_id {
-        Some(id) => parse_story_id(id)?,
+        Some(id) => parse_story_input_id(id)?,
         None => read_branch_id()?,
     };
 
@@ -722,7 +722,7 @@ pub fn read_branch_id() -> anyhow::Result<u64> {
     let branch =
         branch_name(&head_contents).ok_or_else(|| anyhow!("no branch name found in .git/head"))?;
 
-    let id = extract_id(&branch).ok_or_else(|| {
+    let id = extract_branch_id(&branch).ok_or_else(|| {
         anyhow!(format!(
             indoc! {r#"
                 the current git branch doesn't appear to have an id in it.
@@ -746,7 +746,7 @@ pub fn read_branch_id() -> anyhow::Result<u64> {
     Ok(id)
 }
 
-pub fn branch_name(head_contents: &str) -> Option<String> {
+fn branch_name(head_contents: &str) -> Option<String> {
     Some(
         head_contents
             .strip_prefix("ref: refs/heads/")?
@@ -755,40 +755,17 @@ pub fn branch_name(head_contents: &str) -> Option<String> {
     )
 }
 
-pub fn extract_id(branch_name: &str) -> Option<u64> {
-    // lazy_static! {
-    //     static ref RE: Regex = Regex::new(r"(?P<story_id>\d+)").unwrap();
-    // }
-    // RE.captures(branch_name)
-    //     .and_then(|cap| cap.name("story_id").map(|bid| bid.as_str().to_string()))
-
+fn extract_branch_id(branch_name: &str) -> Option<u64> {
     branch_name
         .split(|c: char| !c.is_numeric())
         .filter_map(|s| s.parse::<u64>().ok())
         .last()
 }
 
-#[cfg(test)]
-mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
-
-    #[test]
-    fn test_branch_name() {
-        assert_eq!(
-            branch_name("ref: refs/heads/main"),
-            Some("main".to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_id() {
-        assert_eq!(extract_id("yep-123"), Some(123));
-        assert_eq!(extract_id("yep-24-123"), Some(123));
-        assert_eq!(extract_id("123-456-yep"), Some(456));
-        assert_eq!(extract_id("foobar"), None);
-    }
+fn parse_story_input_id(s: &str) -> Result<u64> {
+    extract_branch_id(s).ok_or_else(|| anyhow!("Could not parse story id from {}", s))
 }
+
 
 fn print_markdown(text: &str, columns: Option<u16>) -> anyhow::Result<()> {
     let parser = pulldown_cmark::Parser::new_ext(
@@ -879,26 +856,32 @@ fn extract_links(text: &str) -> Vec<String> {
         .collect()
 }
 
-// parses a u64 integer from a string like "123" or "#123" or "https://www.pivotaltracker.com/story/show/185062454"
-fn parse_story_id(s: &str) -> Result<u64> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r"(?P<id>\d+)").unwrap();
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_branch_name() {
+        assert_eq!(
+            branch_name("ref: refs/heads/main"),
+            Some("main".to_string())
+        );
     }
 
-    RE.captures(s)
-        .and_then(|cap| {
-            cap.name("id")
-                .map(|bid| bid.as_str().parse::<u64>().unwrap())
-        })
-        .ok_or_else(|| anyhow!("Could not parse story id from {}", s))
-}
-
-#[cfg(test)]
-mod parse_story_id_tests {
-    use super::parse_story_id;
+    #[test]
+    fn test_extract_id() {
+        assert_eq!(extract_branch_id("yep-123"), Some(123));
+        assert_eq!(extract_branch_id("yep-24-123"), Some(123));
+        assert_eq!(extract_branch_id("123-456-yep"), Some(456));
+        assert_eq!(extract_branch_id("foobar"), None);
+    }
 
     #[test]
     fn test_string_id() {
-        assert_eq!(parse_story_id("123").unwrap(), 123);
+        assert_eq!(parse_story_input_id("123").unwrap(), 123);
+        assert_eq!(parse_story_input_id("#123").unwrap(), 123);
+        assert_eq!(parse_story_input_id("https://www.pivotaltracker.com/story/show/333").unwrap(), 333);
+        assert_eq!(parse_story_input_id("https://www.pivotaltracker.com/n/projects/123/stories/456").unwrap(), 456);
     }
 }
