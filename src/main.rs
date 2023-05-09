@@ -98,7 +98,7 @@ enum Commands {
     Whoami {},
 
     /// Recent things you have done on tracker
-    Activity {},
+    Activity(ActivityArgs),
     // future commands:
     // - cache clear (handle changes to tracker Me record)
 }
@@ -142,8 +142,8 @@ async fn main() -> Result<()> {
         Some(Commands::PullRequest(pr_args)) => {
             print_result(pull_request(pr_args).await);
         }
-        Some(Commands::Activity {}) => {
-            print_result(activity().await);
+        Some(Commands::Activity(activity_args)) => {
+            print_result(activity(activity_args).await);
         }
 
         None => {}
@@ -428,7 +428,20 @@ async fn tracker_me() -> anyhow::Result<api::schema::Me> {
     }
 }
 
-async fn activity() -> anyhow::Result<()> {
+#[derive(clap::ValueEnum, Clone)]
+enum ActivityFormat {
+    Plain,
+    Full,
+}
+
+#[derive(Args)]
+pub struct ActivityArgs {
+    // defaults to plain
+    #[arg(short, long, default_value = "full")]
+    format: ActivityFormat,
+}
+
+async fn activity(activity_args: &ActivityArgs) -> anyhow::Result<()> {
     #[derive(Tabled, Debug)]
     struct ActivityRow {
         #[tabled(rename = "Story")]
@@ -485,7 +498,15 @@ async fn activity() -> anyhow::Result<()> {
                         .collect::<Vec<String>>()
                         .join(", ");
 
-                    println!("{}\n  └── {}", story_label.trim(), highlights.italic());
+                    println!("{}", story_label.trim());
+                    match activity_args.format {
+                        ActivityFormat::Plain => {
+                            // noop
+                        }
+                        ActivityFormat::Full => {
+                            println!("  └── {}", highlights.italic());
+                        }
+                    }
                 });
 
             println!();
