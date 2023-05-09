@@ -543,9 +543,9 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
         api::schema::MaybeStoryDetail::StoryDetail(sd) => {
             let view_on_web = format!("View this story on Tracker: {}", sd.url);
             println!(
-                "{}\n{} · {}\n",
-                sd.name.black().bold(),
+                "{}: {}\n{}\n",
                 format_story_type(&sd.story_type),
+                sd.name.black().bold(),
                 format_current_state(&sd.current_state),
             );
             let line =
@@ -556,7 +556,14 @@ pub async fn view(view_args: &ViewArgs) -> anyhow::Result<()> {
                 .unwrap_or("(description missing)".to_string());
 
             println!("{}", line.truecolor(100, 100, 100));
-            print_markdown(&description, Some(80))?;
+
+            let max_width = if atty::is(atty::Stream::Stdout) {
+                Some(80)
+            } else {
+                None
+            };
+
+            print_markdown(&description, max_width)?;
 
             let links = extract_links(&description);
 
@@ -837,8 +844,8 @@ fn current_state_icon(state: &StoryState) -> ColoredString {
     }
 }
 
-fn format_current_state(state: &StoryState) -> ColoredString {
-    match state {
+fn format_current_state(state: &StoryState) -> String {
+    let message = match state {
         StoryState::Planned => "Planned".black(),
         StoryState::Unscheduled => "Unscheduled".black(),
         StoryState::Unstarted => "Unstarted".black(),
@@ -847,7 +854,9 @@ fn format_current_state(state: &StoryState) -> ColoredString {
         StoryState::Delivered => "Delivered".green(),
         StoryState::Accepted => "Accepted".green(),
         StoryState::Rejected => "Rejected".red(),
-    }
+    };
+
+    format!("{} {}", current_state_icon(state), message)
 }
 
 fn format_story_type(story_type: &StoryType) -> ColoredString {
