@@ -307,7 +307,7 @@ pub async fn tracker_api_client() -> anyhow::Result<reqwest::Client> {
 
 #[derive(Args)]
 pub struct BranchArgs {
-    story_id: u64,
+    story_id: String,
 
     /// Optionally provide a different branch name prefix, defaults to story name
     #[arg(short, long)]
@@ -320,10 +320,11 @@ pub struct BranchArgs {
 pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
+    let story_id = parse_story_id(&branch_args.story_id)?;
 
     let story_url = format!(
         "https://www.pivotaltracker.com/services/v5/projects/{}/stories/{}",
-        project_id, branch_args.story_id
+        project_id, story_id
     );
 
     let data: api::schema::StoryDetail = client.get(&story_url).send().await?.json().await?;
