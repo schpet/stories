@@ -391,7 +391,9 @@ pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
             if result.status.success() {
                 format!("checked out {}", branch_name.bold())
             } else {
-                format!("🔥 failed! retry with:\n\tgit switch -c {}", branch_name).red().to_string()
+                format!("🔥 failed! retry with:\n\tgit switch -c {}", branch_name)
+                    .red()
+                    .to_string()
             }
         }
         Err(err) => {
