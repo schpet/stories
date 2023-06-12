@@ -2,12 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2023-06-12
+
+### Features
+
+- Accept ids like #123 or story urls (#17)
+- Accept more liberal input for `stories branch`
+- Improve formatting for stories view
+- Add a more basic formatting option to activity (#19)
+- Add project command to open up the project view (#20)
+
+### Miscellaneous Tasks
+
+- Fix behavior of git branching, improve error messages (#18)
+
 ## [0.3.2] - 2023-04-30
 
 ### Miscellaneous Tasks
 
 - Include git push step in release
 - Include changelog in github release
+- Release stories version 0.3.2
 
 ## [0.3.1] - 2023-04-30
 
