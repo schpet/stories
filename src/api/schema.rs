@@ -93,7 +93,6 @@ pub struct ActivityEntityReference {
     pub name: Option<String>,
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Me {
     pub id: u64,
