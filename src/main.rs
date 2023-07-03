@@ -447,6 +447,10 @@ pub struct ActivityArgs {
     // defaults to plain
     #[arg(short, long, default_value = "full")]
     format: ActivityFormat,
+
+    /// Print json response
+    #[arg(short, long)]
+    json: bool,
 }
 
 async fn activity(activity_args: &ActivityArgs) -> anyhow::Result<()> {
@@ -460,6 +464,18 @@ async fn activity(activity_args: &ActivityArgs) -> anyhow::Result<()> {
 
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
+
+    if activity_args.json {
+        let resp = client
+            .get("https://www.pivotaltracker.com/services/v5/my/activity")
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        println!("{}", resp);
+        return Ok(());
+    }
 
     let activities: Vec<api::schema::Activity> = client
         .get("https://www.pivotaltracker.com/services/v5/my/activity")
@@ -493,7 +509,13 @@ async fn activity(activity_args: &ActivityArgs) -> anyhow::Result<()> {
                         .partial_cmp(&b.primary_resources[0].id)
                         .unwrap()
                 })
-                .group_by(|a| a.primary_resources[0].name.to_string())
+                .group_by(|a| {
+                    a.primary_resources[0]
+                        .name
+                        .as_ref()
+                        .unwrap_or(&a.primary_resources[0].kind)
+                        .to_string()
+                })
                 .into_iter()
                 .for_each(|(story_label, activities_for_story)| {
                     let highlights = activities_for_story
