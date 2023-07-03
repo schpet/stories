@@ -74,7 +74,7 @@ pub struct Activity {
     pub kind: String,
     pub message: String,
     pub highlight: String,
-    pub primary_resources: Vec<EntityReference>,
+    pub primary_resources: Vec<ActivityEntityReference>,
     pub project: EntityReference,
     pub occurred_at: String,
 }
@@ -84,6 +84,13 @@ pub struct EntityReference {
     pub kind: String,
     pub id: u64,
     pub name: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ActivityEntityReference {
+    pub kind: String,
+    pub id: Option<u64>,
+    pub name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
