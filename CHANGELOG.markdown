@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2023-07-03
+
+### Bug Fixes
+
+- Handle activity json parsing with missing ids (#22)
+- Use correct prefix for bug fix commit messages (#21)
+
 ## [0.4.0] - 2023-06-12
 
 ### Features
@@ -15,6 +22,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Fix behavior of git branching, improve error messages (#18)
+- Release stories version 0.4.0
 
 ## [0.3.2] - 2023-04-30
 
