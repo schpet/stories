@@ -234,7 +234,7 @@ pub async fn pull_request(pr_args: &PrArgs) -> anyhow::Result<()> {
                     .messages([
                         ChatCompletionRequestMessageArgs::default()
                             .role(Role::Assistant)
-                            .content( "You summarize tasks into git commit messages. You follow the git conventional commit specification by prefixing features and bugs with feat: and bug: respectively, and omit the optional scope.")
+                            .content( "You summarize tasks into git commit messages. You follow the git conventional commit specification by prefixing features and bugs with feat: and fix: respectively, and omit the optional scope.")
                             .build()?,
                         ChatCompletionRequestMessageArgs::default()
                             .role(Role::User)
