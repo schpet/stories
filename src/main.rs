@@ -15,7 +15,6 @@ use lazy_static::lazy_static;
 use pulldown_cmark_mdcat::resources::NoopResourceHandler;
 use pulldown_cmark_mdcat::{push_tty, Environment, Settings, TerminalProgram, TerminalSize, Theme};
 use regex::Regex;
-use reqwest::header::USER_AGENT;
 use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 use slugify::slugify;
@@ -304,7 +303,7 @@ pub async fn tracker_api_client() -> anyhow::Result<reqwest::Client> {
     headers.insert("X-TrackerToken", api_token_value);
 
     let client = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
+        .user_agent(APP_USER_AGENT)
         .default_headers(headers)
         .build()?;
 
