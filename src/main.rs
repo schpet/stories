@@ -326,6 +326,7 @@ pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
     let client = tracker_api_client().await?;
     let project_id = read_project_id()?;
     let story_id = parse_story_id(&branch_args.story_id)?;
+    let me = tracker_me().await?;
 
     let story_url = format!(
         "https://www.pivotaltracker.com/services/v5/projects/{}/stories/{}",
@@ -353,6 +354,11 @@ pub async fn branch(branch_args: &BranchArgs) -> anyhow::Result<()> {
     map.insert(
         "current_state".to_string(),
         Value::String("started".to_string()),
+    );
+
+    map.insert(
+        "owner_ids".to_string(),
+        Value::Array(vec![Value::Number(Number::from(me.id))]),
     );
 
     if branch_args.estimate.is_some() {
