@@ -2,12 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2023-07-13
+
+### Bug Fixes
+
+- Use appropriate USER_AGENT
+- Set yourself as an owner when starting stories (#23)
+
 ## [0.5.0] - 2023-07-03
 
 ### Bug Fixes
 
 - Handle activity json parsing with missing ids (#22)
 - Use correct prefix for bug fix commit messages (#21)
+
+### Miscellaneous Tasks
+
+- Release stories version 0.5.0
 
 ## [0.4.0] - 2023-06-12
 
